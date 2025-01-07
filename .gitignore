@@ -3,6 +3,17 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+
+point_clouds/
+
+
+
+
+
+
+
+
+
 # C extensions
 *.so
 
