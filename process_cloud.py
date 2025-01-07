@@ -6,12 +6,14 @@ __author__ = "Yanis Sid-Ali Haouchine"
 __date__ = "novembre 2024"
 
 import pyvista as pv
+import open3d as o3d
+import numpy as np
 
 
+""" Visualization with pyvista """
 def load_cloud(filepath):
     cloud = pv.read(filepath)
     return cloud
-
 
 def visualize_cloud(pts):
     cloud = pv.PolyData(pts)
@@ -23,6 +25,20 @@ def visualize_cloud(pts):
     #plotter.enable_point_picking(callback=lambda p: print(f"Selected point : {p}"))
     plotter.show()
 
+#point_cloud = load_cloud("point_clouds/cave_res_1cm_cross_section.ply")
+#visualize_cloud(point_cloud)
 
-point_cloud = load_cloud("cave_res_1cm_cross_section.ply")
-visualize_cloud(point_cloud)
+
+""" Visualization with Open3D """
+o3d.visualization.gui.Application.instance.initialize()
+point_cloud = o3d.io.read_point_cloud("point_clouds/cave_res_10cm.ply")
+
+# Utiliser le visualiseur interactif avec édition
+visualizer = o3d.visualization.VisualizerWithEditing()
+visualizer.create_window()
+visualizer.add_geometry(point_cloud)
+visualizer.run()  # Sélection interactive ici
+visualizer.destroy_window()
+
+# Récupérer les index des points sélectionnés
+print("Points sélectionnés :", visualizer.get_picked_points())
