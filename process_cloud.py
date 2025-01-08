@@ -38,7 +38,7 @@ def visualize_cloud(pts):
 o3d.visualization.gui.Application.instance.initialize()
 
 # Importing point cloud
-point_cloud_name = "cave_res_10cm.ply"
+point_cloud_name = "cave_res_1cm.ply"
 point_cloud = o3d.io.read_point_cloud("point_clouds/" + point_cloud_name)
 
 # Creating the visualizer
@@ -50,7 +50,7 @@ visualizer.destroy_window()
 
 # Selecting points in the visualizer
 selected_indices = visualizer.get_picked_points()
-print("Points sélectionnés :", selected_indices)
+print("Selected points: ", selected_indices)
 
 # Extracting the selected points
 selected_points = point_cloud.select_by_index(selected_indices)
@@ -63,7 +63,7 @@ else:
     cut_position = selected_points_coordinates[0][0]
 
     # Define the thickness of the cross-section
-    thickness = 0.1
+    thickness = 2
 
     # Extracting points within the cross-section thickness
     points = np.asarray(point_cloud.points)
@@ -80,4 +80,6 @@ else:
         window_name=point_cloud_name + ": Cross-section point cloud",
         width=1280,
         height=800
-        )
+    )
+
+
