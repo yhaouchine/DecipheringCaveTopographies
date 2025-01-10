@@ -74,12 +74,9 @@ else:
     cut_pcd = o3d.geometry.PointCloud()
     cut_pcd.points = o3d.utility.Vector3dVector(cut_points)
 
-    # Display the new point cloud
-    o3d.visualization.draw_geometries(
-        [cut_pcd],
-        window_name=point_cloud_name + ": Cross-section point cloud",
-        width=1280,
-        height=800
-    )
-
-
+    # Creating the second interactive visualizer for the cross-section
+    visualizer2 = o3d.visualization.VisualizerWithEditing()
+    visualizer2.create_window(window_name=point_cloud_name + ": Cross-section", width=1280, height=800)
+    visualizer2.add_geometry(cut_pcd)
+    visualizer2.run()
+    visualizer2.destroy_window()
