@@ -80,3 +80,41 @@ else:
     visualizer2.add_geometry(cut_pcd)
     visualizer2.run()
     visualizer2.destroy_window()
+
+    # Selecting points in the cross-section from which the Bounding Box is created
+    selected_indices_2 = visualizer2.get_picked_points()
+    print("Selected points in cross_section: ", selected_indices_2)
+
+    if len(selected_indices_2) > 0:
+        # Getting the selected point
+        selected_point = np.asarray(cut_pcd.points)[selected_indices_2[0]]
+        print("selected point: ", selected_point)
+
+        # Size of the BB
+        bbox_size = 0.1
+
+        # Create a bounding box centered on the selected point
+        min_bound = selected_point - bbox_size / 2
+        max_bound = selected_point + bbox_size / 2
+        bbox = o3d.geometry.AxisAlignedBoundingBox(min_bound, max_bound)
+
+        # Visualize the bounding box in the same window
+        visualizer2 = o3d.visualization.Visualizer()
+        visualizer2.create_window(window_name="Cross-section with Bounding Box", width=1280, height=800)
+        visualizer2.get_render_option().background_color = np.array([0.5, 0.5, 0.5])
+        visualizer2.add_geometry(cut_pcd)
+        visualizer2.add_geometry(bbox)
+        visualizer2.run()
+        visualizer2.destroy_window()
+
+        # Filter points outside the bounding box
+        filtered_pcd = cut_pcd.crop(bbox)
+
+        # Visualize the filtered point cloud
+        o3d.visualization.draw_geometries(
+            [filtered_pcd],
+            window_name="Filtered Point Cloud",
+            width=1280,
+            height=800
+        )
+
