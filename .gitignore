@@ -5,7 +5,8 @@ __pycache__/
 
 
 point_clouds/
-
+.idea
+Thumbs.db
 
 
 
