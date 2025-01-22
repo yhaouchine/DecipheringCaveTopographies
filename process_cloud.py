@@ -8,7 +8,6 @@ __date__ = "novembre 2024"
 import open3d as o3d
 import numpy as np
 
-
 """ Visualization with Open3D """
 
 background_color = {
@@ -19,7 +18,6 @@ background_color = {
 
 
 def o3d_visualizer(window_name, data_sets=None, data=None, multiple_data=False, color_name="white"):
-
     back_color = background_color.get(color_name.lower(), [1.0, 1.0, 1.0])
     open3d_visualizer = o3d.visualization.VisualizerWithEditing()
     open3d_visualizer.create_window(window_name=window_name, width=1280, height=800)
@@ -29,7 +27,7 @@ def o3d_visualizer(window_name, data_sets=None, data=None, multiple_data=False, 
     if multiple_data and data_sets:
         print("Select geometries to display:")
         for i, (label, geom) in enumerate(data_sets):
-            print(f"{i}: {label} - {type(geom)}")  # Display label and type of geometry
+            print(f"{i}: {label} ")  # Display label and type of geometry
         geom_indices = input("Enter the indices of the geometries you want to display, separated by commas: ")
         geom_indices = [int(i.strip()) for i in geom_indices.split(',')]
 
@@ -48,16 +46,30 @@ def o3d_visualizer(window_name, data_sets=None, data=None, multiple_data=False, 
     return open3d_visualizer
 
 
+def extract_cross_section(pc, position, e):
+    points = np.asarray(pc.points)
+    mask = (points[:, 0] > position - e / 2) & (points[:, 0] < position + e / 2)
+    cut_points = points[mask]
+    cut_pc = o3d.geometry.PointCloud()
+    cut_pc.points = o3d.utility.Vector3dVector(cut_points)
+    return cut_pc
+
+
+def create_bounding_box(center_point, size):
+    min_bound = center_point - size / 2
+    max_bound = center_point + size / 2
+    return o3d.geometry.AxisAlignedBoundingBox(min_bound, max_bound)
+
+
 # initializing GUI instance
 o3d.visualization.gui.Application.instance.initialize()
 
-data_sets_list = []
-# Importing point cloud
+data_sets_list = []                                                         # initializing empty list of data
 point_cloud_name = "cave_res_1cm.ply"
-point_cloud = o3d.io.read_point_cloud("point_clouds/" + point_cloud_name)
-data_sets_list.append((point_cloud_name, point_cloud))
+point_cloud = o3d.io.read_point_cloud("point_clouds/" + point_cloud_name)   # importing point cloud
+data_sets_list.append((point_cloud_name, point_cloud))                      # adding point cloud to data list
 
-# Creating the visualizer
+# Creating first visualizer
 visualizer = o3d_visualizer(window_name=point_cloud_name, data=point_cloud)
 
 # Selecting points in the visualizer
@@ -67,56 +79,46 @@ print("Selected points: ", selected_indices)
 # Extracting the selected points
 selected_points = point_cloud.select_by_index(selected_indices)
 selected_points_coordinates = np.asarray(selected_points.points)
-if len(selected_points_coordinates) == 0:
-    print("No point selected")
+if not selected_indices:
+    print("No points selected. Exiting.")
+    exit()
 
-else:
-    # Position the cut on the x coordinate of the point
-    cut_position = selected_points_coordinates[0][0]
+# Position the cut on the point
+cut_position = selected_points_coordinates[0][0]
+thickness = 2
 
-    # Define the thickness of the cross-section
-    thickness = 2
+cross_section_pc = extract_cross_section(point_cloud, cut_position, thickness)
+data_sets_list.append(("Cross-section points", cross_section_pc))
 
-    # Extracting points within the cross-section thickness
-    points = np.asarray(point_cloud.points)
-    mask = (points[:, 0] > cut_position - thickness / 2) & (points[:, 0] < cut_position + thickness / 2)
+# Creating the second interactive visualizer for the cross-section
+visualizer2 = o3d_visualizer(window_name=point_cloud_name + ": Cross-section", data=cross_section_pc)
 
-    # Create a new point cloud with the extracted points
-    cut_points = points[mask]
-    cut_pcd = o3d.geometry.PointCloud()
-    cut_pcd.points = o3d.utility.Vector3dVector(cut_points)
-    data_sets_list.append(("Cross-section points", cut_pcd))
+# Selecting point in the cross-section from which the Bounding Box is created
+center_indice = visualizer2.get_picked_points()
+print("Selected points in cross_section: ", center_indice)
 
-    # Creating the second interactive visualizer for the cross-section
-    visualizer2 = o3d_visualizer(window_name=point_cloud_name + ": Cross-section", data=cut_pcd)
+if not center_indice:
+    print("No point selected in cross-section. Exiting.")
+    exit()
 
-    # Selecting points in the cross-section from which the Bounding Box is created
-    selected_indices_2 = visualizer2.get_picked_points()
-    print("Selected points in cross_section: ", selected_indices_2)
+# Getting the selected point
+bbox_center = np.asarray(cross_section_pc.points)[center_indice[0]]
+print("selected center of bounding box: ", bbox_center)
 
-    if len(selected_indices_2) > 0:
-        # Getting the selected point
-        selected_point = np.asarray(cut_pcd.points)[selected_indices_2[0]]
-        print("selected point: ", selected_point)
+bbox_size = 1
+bbox = create_bounding_box(bbox_center, bbox_size)
+data_sets_list.append(("Bounding box", bbox))
 
-        # Size of the BB
-        bbox_size = 5
+visualizer3 = o3d_visualizer(window_name="PC + Bbox", data_sets=data_sets_list, multiple_data=True,
+                             color_name="grey")
 
-        # Create a bounding box centered on the selected point
-        min_bound = selected_point - bbox_size / 2
-        max_bound = selected_point + bbox_size / 2
-        bbox = o3d.geometry.AxisAlignedBoundingBox(min_bound, max_bound)
-        data_sets_list.append(("Bounding box", bbox))
+# Filter points outside the bounding box
+filtered_pc = cross_section_pc.crop(bbox)
 
-        visualizer3 = o3d_visualizer(window_name="PC + Bbox", data_sets=data_sets_list, multiple_data=True, color_name="grey")
-
-        # Filter points outside the bounding box
-        filtered_pcd = cut_pcd.crop(bbox)
-
-        # Visualize the filtered point cloud
-        o3d.visualization.draw_geometries(
-            [filtered_pcd],
-            window_name="Filtered Point Cloud",
-            width=1280,
-            height=800
-        )
+# Visualize the filtered point cloud
+o3d.visualization.draw_geometries(
+    [filtered_pc],
+    window_name="Filtered Point Cloud",
+    width=1280,
+    height=800
+)
