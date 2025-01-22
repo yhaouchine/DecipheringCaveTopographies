@@ -19,6 +19,15 @@ background_color = {
 
 
 def o3d_visualizer(window_name, geom1=None, geom2=None, color_name="white"):
+    """
+    Function to create a visualizer to display the data.
+    @param window_name: Name of the visualizer window
+    @param geom1: First data to display
+    @param geom2: Second data to display
+    @param color_name: Color of the visualizer background
+    @return: The point selected with shift + left click
+    """
+
     back_color = background_color.get(color_name.lower(), [1.0, 1.0, 1.0])
 
     # If a bounding box is provided, use draw_geometries for combined visualization
@@ -47,6 +56,13 @@ def o3d_visualizer(window_name, geom1=None, geom2=None, color_name="white"):
 
 
 def extract_cross_section(pc, position, e):
+    """
+    Function to extract a cross-section from a point cloud
+    @param pc: The initial point cloud from which the cross-section is extracted
+    @param position: Position of the cross-section along the x-axis
+    @param e: Thickness of the cross-section
+    @return: The cross-section point cloud
+    """
     points = np.asarray(pc.points)
     mask = (points[:, 0] > position - e / 2) & (points[:, 0] < position + e / 2)
     cut_points = points[mask]
@@ -56,6 +72,12 @@ def extract_cross_section(pc, position, e):
 
 
 def create_bounding_box(center_point, size):
+    """
+    Function to create a bounding box
+    @param center_point: Point representing the center of the bounding box
+    @param size: Range of the bounding box centered on the center point
+    @return: Bounding box object
+    """
     min_bound = center_point - size / 2
     max_bound = center_point + size / 2
     return o3d.geometry.AxisAlignedBoundingBox(min_bound, max_bound)
@@ -93,10 +115,10 @@ bbox_size = 1
 bbox = create_bounding_box(bbox_center, bbox_size)
 bbox.color = [1.0, 0.0, 0.0]
 
-visualizer3 = o3d_visualizer(window_name="PC + Bbox", geom1=cross_section_pc, geom2=bbox, color_name="grey")
+visualizer2 = o3d_visualizer(window_name="PC + Bbox", geom1=cross_section_pc, geom2=bbox)
 
 # Filter points outside the bounding box
 filtered_pc = cross_section_pc.crop(bbox)
 
 # Visualize the filtered point cloud
-visualizer4 = o3d_visualizer(window_name="Filtered PC", geom1=filtered_pc, color_name="grey")
+visualizer3 = o3d_visualizer(window_name="Filtered PC", geom1=filtered_pc)
