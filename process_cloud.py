@@ -6,6 +6,7 @@ __author__ = "Yanis Sid-Ali Haouchine"
 __date__ = "novembre 2024"
 
 import sys
+import os
 import open3d as o3d
 import numpy as np
 
@@ -18,16 +19,18 @@ background_color = {
 }
 
 
-def o3d_visualizer(window_name, geom1=None, geom2=None, color_name="white"):
+def o3d_visualizer(window_name, geom1=None, geom2=None, save=False, color_name="white"):
     """
     Function to create a visualizer to display the data.
+    @param save:
     @param window_name: Name of the visualizer window
     @param geom1: First data to display
     @param geom2: Second data to display
     @param color_name: Color of the visualizer background
     @return: The point selected with shift + left click
     """
-
+    save_folder = "saved_clouds"  # Folder containing the saved clouds
+    os.makedirs(save_folder, exist_ok=True)  # Create the folder if it does not exist
     back_color = background_color.get(color_name.lower(), [1.0, 1.0, 1.0])
 
     # If a bounding box is provided, use draw_geometries for combined visualization
@@ -50,6 +53,21 @@ def o3d_visualizer(window_name, geom1=None, geom2=None, color_name="white"):
     if geom1:
         visualizer.add_geometry(geom1)
     visualizer.run()
+
+    # Saved the point cloud if asked
+    if geom1 and save:
+        filename = input("Provide a name for the point cloud file (with extension, e.g. 'cloud.ply'): ")
+        save_path = os.path.join(save_folder, filename)
+        o3d.io.write_point_cloud(save_path, geom1)
+        print(f"Point cloud saved as: {save_path}")
+    elif geom1 and not save:
+        user_input = input("Do you want to save the point cloud? (y/n): ").strip().lower()
+        if user_input == 'y':
+            filename = input("Provide a name for the point cloud file (with extension, e.g. 'cloud.ply'): ")
+            save_path = os.path.join(save_folder, filename)
+            o3d.io.write_point_cloud(save_path, geom1)
+            print(f"Point cloud saved as: {save_path}")
+
     picked_points = visualizer.get_picked_points()
     visualizer.destroy_window()
     return picked_points
@@ -111,14 +129,24 @@ if not center_index:
     sys.exit()
 
 bbox_center = np.asarray(cross_section_pc.points)[center_index[0]]
-bbox_size = 1
+bbox_size = 2
 bbox = create_bounding_box(bbox_center, bbox_size)
 bbox.color = [1.0, 0.0, 0.0]
 
-visualizer2 = o3d_visualizer(window_name="PC + Bbox", geom1=cross_section_pc, geom2=bbox)
+visualizer2 = o3d_visualizer(window_name="Cross-section and bounding box", geom1=cross_section_pc, geom2=bbox)
 
 # Filter points outside the bounding box
 filtered_pc = cross_section_pc.crop(bbox)
 
 # Visualize the filtered point cloud
-visualizer3 = o3d_visualizer(window_name="Filtered PC", geom1=filtered_pc)
+visualizer3 = o3d_visualizer(window_name="Points within the bounding box", geom1=filtered_pc)
+
+
+# ajouter une ellipse autour d'un point central et retirer les points
+# tester différentes formes
+# partir d'une forme initiale et faire attirer la surface de base par les points du nuage (DSI)
+# regarder graphite
+# regarder ce qui se fait deja sur les maillages
+# garder un attribut de rugosité passée après lissage
+# placer disques qui dépendent de la courbure, calculer direction et position moyenne (Laplacien)
+# regarder outils pour calculer et exporter des propriétés
