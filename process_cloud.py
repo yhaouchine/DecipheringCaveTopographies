@@ -19,7 +19,7 @@ background_color = {
 }
 
 
-def o3d_visualizer(window_name, geom1=None, geom2=None, save=False, color_name="white"):
+def o3d_visualizer(window_name, geom1=None, geom2=None, save=None, color_name="white"):
     """
     Function to create a visualizer to display the data.
     @param save:
@@ -60,7 +60,7 @@ def o3d_visualizer(window_name, geom1=None, geom2=None, save=False, color_name="
         save_path = os.path.join(save_folder, filename)
         o3d.io.write_point_cloud(save_path, geom1)
         print(f"Point cloud saved as: {save_path}")
-    elif geom1 and not save:
+    elif geom1 and save is None:
         user_input = input("Do you want to save the point cloud? (y/n): ").strip().lower()
         if user_input == 'y':
             filename = input("Provide a name for the point cloud file (with extension, e.g. 'cloud.ply'): ")
@@ -101,46 +101,47 @@ def create_bounding_box(center_point, size):
     return o3d.geometry.AxisAlignedBoundingBox(min_bound, max_bound)
 
 
-# initializing GUI instance
-o3d.visualization.gui.Application.instance.initialize()
+if __name__ == "__main__":
 
-point_cloud_name = "cave_res_1cm.ply"
-point_cloud = o3d.io.read_point_cloud("point_clouds/" + point_cloud_name)  # importing point cloud
+    # initializing GUI instance
+    o3d.visualization.gui.Application.instance.initialize()
 
-# Selecting points in the visualizer
-selected_indices = o3d_visualizer(window_name=point_cloud_name, geom1=point_cloud)
-if not selected_indices:
-    print("No points selected. Exiting.")
-    sys.exit()
+    point_cloud_name = "cave_res_1cm.ply"
+    point_cloud = o3d.io.read_point_cloud("point_clouds/" + point_cloud_name)  # importing point cloud
 
-# Extracting the selected points
-selected_points = point_cloud.select_by_index(selected_indices)
-selected_points_coordinates = np.asarray(selected_points.points)
+    # Selecting points in the visualizer
+    selected_indices = o3d_visualizer(window_name=point_cloud_name, geom1=point_cloud, save=False)
+    if not selected_indices:
+        print("No points selected. Exiting.")
+        sys.exit()
 
-# Position the cut on the point
-cut_position = selected_points_coordinates[0][0]
-thickness = 2
-cross_section_pc = extract_cross_section(point_cloud, cut_position, thickness)
+    # Extracting the selected points
+    selected_points = point_cloud.select_by_index(selected_indices)
+    selected_points_coordinates = np.asarray(selected_points.points)
 
-# Selecting point in the cross-section from which the Bounding Box is created
-center_index = o3d_visualizer(window_name=point_cloud_name + ": Cross-section", geom1=cross_section_pc)
-if not center_index:
-    print("No point selected in cross-section. Exiting.")
-    sys.exit()
+    # Position the cut on the point
+    cut_position = selected_points_coordinates[0][0]
+    thickness = 2
+    cross_section_pc = extract_cross_section(point_cloud, cut_position, thickness)
 
-bbox_center = np.asarray(cross_section_pc.points)[center_index[0]]
-bbox_size = 2
-bbox = create_bounding_box(bbox_center, bbox_size)
-bbox.color = [1.0, 0.0, 0.0]
+    # Selecting point in the cross-section from which the Bounding Box is created
+    center_index = o3d_visualizer(window_name=point_cloud_name + ": Cross-section", geom1=cross_section_pc)
+    if not center_index:
+        print("No point selected in cross-section. Exiting.")
+        sys.exit()
 
-visualizer2 = o3d_visualizer(window_name="Cross-section and bounding box", geom1=cross_section_pc, geom2=bbox)
+    bbox_center = np.asarray(cross_section_pc.points)[center_index[0]]
+    bbox_size = 2
+    bbox = create_bounding_box(bbox_center, bbox_size)
+    bbox.color = [1.0, 0.0, 0.0]
 
-# Filter points outside the bounding box
-filtered_pc = cross_section_pc.crop(bbox)
+    visualizer2 = o3d_visualizer(window_name="Cross-section and bounding box", geom1=cross_section_pc, geom2=bbox)
 
-# Visualize the filtered point cloud
-visualizer3 = o3d_visualizer(window_name="Points within the bounding box", geom1=filtered_pc)
+    # Filter points outside the bounding box
+    filtered_pc = cross_section_pc.crop(bbox)
 
+    # Visualize the filtered point cloud
+    visualizer3 = o3d_visualizer(window_name="Points within the bounding box", geom1=filtered_pc)
 
 # ajouter une ellipse autour d'un point central et retirer les points
 # tester différentes formes
