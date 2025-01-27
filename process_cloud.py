@@ -6,11 +6,10 @@ __author__ = "Yanis Sid-Ali Haouchine"
 __date__ = "novembre 2024"
 
 import sys
-import os
 import open3d as o3d
 import numpy as np
-
-""" Visualization with Open3D """
+from open3d.cpu.pybind.geometry import PointCloud, Geometry, AxisAlignedBoundingBox
+from pathlib import Path
 
 background_color = {
     "white": [1.0, 1.0, 1.0],
@@ -19,18 +18,22 @@ background_color = {
 }
 
 
-def o3d_visualizer(window_name, geom1=None, geom2=None, save=None, color_name="white"):
+def o3d_visualizer(window_name: str, geom1: Geometry = None, geom2: Geometry = None, save: bool | None = None,
+                   color_name: str = "white",
+                   filename: Path | str | None = None) -> None | list:
     """
     Function to create a visualizer to display the data.
-    @param save:
+
+    @param save: Save the point cloud or not
+    @param filename: name of the point cloud to be saved
     @param window_name: Name of the visualizer window
     @param geom1: First data to display
     @param geom2: Second data to display
     @param color_name: Color of the visualizer background
     @return: The point selected with shift + left click
     """
-    save_folder = "saved_clouds"  # Folder containing the saved clouds
-    os.makedirs(save_folder, exist_ok=True)  # Create the folder if it does not exist
+    save_folder = Path("saved_clouds")  # Folder containing the saved clouds
+    save_folder.mkdir(parents=True, exist_ok=True)  # Create the folder if it does not exist
     back_color = background_color.get(color_name.lower(), [1.0, 1.0, 1.0])
 
     # If a bounding box is provided, use draw_geometries for combined visualization
@@ -56,16 +59,17 @@ def o3d_visualizer(window_name, geom1=None, geom2=None, save=None, color_name="w
 
     # Saved the point cloud if asked
     if geom1 and save:
-        filename = input("Provide a name for the point cloud file (with extension, e.g. 'cloud.ply'): ")
-        save_path = os.path.join(save_folder, filename)
-        o3d.io.write_point_cloud(save_path, geom1)
-        print(f"Point cloud saved as: {save_path}")
+        if not filename:
+            filename = input("Provide a name for the point cloud file (with extension, e.g. 'cloud.ply'): ")
+            save_path = save_folder / filename
+            o3d.io.write_point_cloud(str(save_path), geom1)
+            print(f"Point cloud saved as: {save_path}")
     elif geom1 and save is None:
         user_input = input("Do you want to save the point cloud? (y/n): ").strip().lower()
         if user_input == 'y':
             filename = input("Provide a name for the point cloud file (with extension, e.g. 'cloud.ply'): ")
-            save_path = os.path.join(save_folder, filename)
-            o3d.io.write_point_cloud(save_path, geom1)
+            save_path = save_folder / filename
+            o3d.io.write_point_cloud(str(save_path), geom1)
             print(f"Point cloud saved as: {save_path}")
 
     picked_points = visualizer.get_picked_points()
@@ -73,9 +77,10 @@ def o3d_visualizer(window_name, geom1=None, geom2=None, save=None, color_name="w
     return picked_points
 
 
-def extract_cross_section(pc, position, e):
+def extract_cross_section(pc: PointCloud, position: np.ndarray, e: float | int) -> PointCloud:
     """
     Function to extract a cross-section from a point cloud
+
     @param pc: The initial point cloud from which the cross-section is extracted
     @param position: Position of the cross-section along the x-axis
     @param e: Thickness of the cross-section
@@ -89,7 +94,7 @@ def extract_cross_section(pc, position, e):
     return cut_pc
 
 
-def create_bounding_box(center_point, size):
+def create_bounding_box(center_point: np.ndarray, size: float | int) -> AxisAlignedBoundingBox:
     """
     Function to create a bounding box
     @param center_point: Point representing the center of the bounding box
@@ -143,7 +148,7 @@ if __name__ == "__main__":
     # Visualize the filtered point cloud
     visualizer3 = o3d_visualizer(window_name="Points within the bounding box", geom1=filtered_pc)
 
-# ajouter une ellipse autour d'un point central et retirer les points
+# TODO: ajouter une ellipse autour d'un point central et retirer les points
 # tester différentes formes
 # partir d'une forme initiale et faire attirer la surface de base par les points du nuage (DSI)
 # regarder graphite
