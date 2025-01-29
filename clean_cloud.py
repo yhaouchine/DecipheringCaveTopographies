@@ -6,35 +6,38 @@ from open3d.cpu.pybind.geometry import PointCloud
 from process_cloud import o3d_visualizer
 
 
-def create_ellipsoid_from_two_points(pc: o3d.geometry.PointCloud,
-                                     selected_i: list[int],
-                                     a_axis: float = 1.0,
-                                     b_axis: float = 1.0,
-                                     resolution: int = 15) -> tuple[o3d.geometry.LineSet, np.ndarray, list[float]]:
+def create_ellipsoid(pc: o3d.geometry.PointCloud, selected_i: list[int], resolution: int = 15,
+                     a_axis: float = 1.0,
+                     b_axis: float = 1.0,
+                     c_axis: float = 1.0
+                     ) -> tuple[o3d.geometry.LineSet, np.ndarray, list[float]]:
     """
-    Creates an ellipsoid based on two selected points: one at the top and one at the bottom of the feature.
+    Creates an ellipsoid.
 
-    @param a_axis:
-    @param b_axis:
     @param pc: The point cloud object.
     @param selected_i: Indices of the two points selected by the user (top and bottom).
     @param resolution: Resolution of the ellipsoid mesh.
+    @param a_axis: Length of a-axis (x-axis) of the ellipsoid
+    @param b_axis: Length of b-axis (y-axis) of the ellipsoid
+    @param c_axis: Length of c-axis (z-axis) of the ellipsoid
     @return: Open3D LineSet representing the wireframe ellipsoid, the center point, and the axes lengths.
     """
-    if len(selected_i) != 2:
-        raise ValueError("You need to select exactly two points.")
 
-    # Get the coordinates of the selected points
-    z_top = np.asarray(pc.points)[selected_i[0]]
-    z_bottom = np.asarray(pc.points)[selected_i[1]]
+    if len(selected_i) == 2:
 
-    # Calculate the center of the ellipsoid (mean of the two selected points)
-    center_point = (z_top + z_bottom) / 2
-    # Calculate the vertical distance between the two points and define initial axes lengths
-    c_axis = np.linalg.norm(z_top - z_bottom)
+        # Get the coordinates of the selected points
+        z_top = np.asarray(pc.points)[selected_i[0]]
+        z_bottom = np.asarray(pc.points)[selected_i[1]]
+
+        # Calculate the center of the ellipsoid (mean of the two selected points)
+        center_point = (z_top + z_bottom) / 2
+        # Calculate the vertical distance between the two points and define initial axes lengths
+        c_axis = np.linalg.norm(z_top - z_bottom)
+    elif len(selected_i) == 1:
+        center_point = np.asarray(pc.points)[selected_i[0]]
 
     # Define axes lengths
-    l_axes = [a_axis, b_axis, c_axis / 2]  # Semi-axes lengths
+    l_axes = [a_axis / 2, b_axis / 2, c_axis / 2]  # Semi-axes lengths
 
     # Create a unit sphere and transform it into an ellipsoid
     meshed_ellipsoid = o3d.geometry.TriangleMesh.create_sphere(radius=1.0, resolution=resolution)
@@ -92,12 +95,12 @@ if __name__ == "__main__":
     point_cloud = o3d.io.read_point_cloud("saved_clouds/" + point_cloud_name)
 
     while True:
-        # Select two points (top and bottom)
-        print("Please select two points: one at the top and one at the bottom of the feature.")
+        # Select points
+        print("Please select one or two points: ")
         selected_indices = o3d_visualizer(window_name=point_cloud_name, geom1=point_cloud, save=False)
 
         # Create ellipsoid based on the two points selected
-        ellipsoid, center, axes_lengths = create_ellipsoid_from_two_points(point_cloud, selected_indices)
+        ellipsoid, center, axes_lengths = create_ellipsoid(point_cloud, selected_indices)
 
         while True:
             # Visualize the point cloud with the ellipsoid
@@ -113,12 +116,16 @@ if __name__ == "__main__":
                 try:
                     new_a_axis = float(input("Enter new value for a-axis length: "))
                     new_b_axis = float(input("Enter new value for b-axis length: "))
+                    new_c_axis = 1.0
+                    if len(selected_indices) == 1:
+                        new_c_axis = float(input("Enter new value for c-axis length: "))
 
-                    ellipsoid, center, axes_lengths = create_ellipsoid_from_two_points(
+                    ellipsoid, center, axes_lengths = create_ellipsoid(
                         point_cloud,
                         selected_indices,
                         a_axis=new_a_axis,
                         b_axis=new_b_axis,
+                        c_axis=new_c_axis,
                         resolution=15
                     )
 
