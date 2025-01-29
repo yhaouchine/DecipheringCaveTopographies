@@ -3,7 +3,6 @@
 import open3d as o3d
 import numpy as np
 from open3d.cpu.pybind.geometry import PointCloud
-
 from process_cloud import o3d_visualizer
 
 
@@ -11,7 +10,7 @@ def create_ellipsoid_from_two_points(pc: o3d.geometry.PointCloud,
                                      selected_i: list[int],
                                      a_axis: float = 1.0,
                                      b_axis: float = 1.0,
-                                     resolution: int = 30) -> tuple[o3d.geometry.LineSet, np.ndarray, list[float]]:
+                                     resolution: int = 15) -> tuple[o3d.geometry.LineSet, np.ndarray, list[float]]:
     """
     Creates an ellipsoid based on two selected points: one at the top and one at the bottom of the feature.
 
@@ -89,49 +88,64 @@ def filter_points_in_ellipsoid(pc: PointCloud, p_center: np.ndarray, l_axes: lis
 
 
 if __name__ == "__main__":
-    # Load point cloud
     point_cloud_name = "section_with_irrelevant_pts_2.ply"
     point_cloud = o3d.io.read_point_cloud("saved_clouds/" + point_cloud_name)
 
-    # Select two points (top and bottom)
-    print("Please select two points: one at the top and one at the bottom of the feature.")
-    selected_indices = o3d_visualizer(window_name=point_cloud_name, geom1=point_cloud, save=False)
-
-    # Create ellipsoid based on the two points selected
-    ellipsoid, center, axes_lengths = create_ellipsoid_from_two_points(point_cloud, selected_indices)
-
-    # Visualize the point cloud with the ellipsoid
-    o3d_visualizer(window_name="Point Cloud with Ellipsoid", geom1=point_cloud, geom2=ellipsoid)
-
     while True:
-        user_input = input("Does the ellipsoid fit the points? (y/n): ").lower().strip()
+        # Select two points (top and bottom)
+        print("Please select two points: one at the top and one at the bottom of the feature.")
+        selected_indices = o3d_visualizer(window_name=point_cloud_name, geom1=point_cloud, save=False)
 
-        if user_input == "y":
-            print("Ellipsoid confirmed. Removing points within...")
-            break
+        # Create ellipsoid based on the two points selected
+        ellipsoid, center, axes_lengths = create_ellipsoid_from_two_points(point_cloud, selected_indices)
 
-        elif user_input == "n":
-            try:
-                new_a_axis: float = float(input("Enter new value for a-axis length: "))
-                new_b_axis: float = float(input("Enter new value for b-axis length: "))
+        while True:
+            # Visualize the point cloud with the ellipsoid
+            o3d_visualizer(window_name="Point Cloud with Ellipsoid", geom1=point_cloud, geom2=ellipsoid)
 
-                ellipsoid, center, axes_lengths = create_ellipsoid_from_two_points(
-                    point_cloud,
-                    selected_indices,
-                    a_axis=new_a_axis,
-                    b_axis=new_b_axis
-                )
+            user_input = input("Does the ellipsoid fit the points? (y/n): ").lower().strip()
 
-                o3d_visualizer(window_name="Point Cloud with Ellipsoid", geom1=point_cloud, geom2=ellipsoid)
+            if user_input == "y":
+                print("Ellipsoid confirmed. Removing points within...")
+                break
 
-            except ValueError:
-                print("Invalid input. Please enter numeric values.")
+            elif user_input == "n":
+                try:
+                    new_a_axis = float(input("Enter new value for a-axis length: "))
+                    new_b_axis = float(input("Enter new value for b-axis length: "))
 
-        else:
-            print("Invalid input. Please respond with 'y' or 'n'.")
+                    ellipsoid, center, axes_lengths = create_ellipsoid_from_two_points(
+                        point_cloud,
+                        selected_indices,
+                        a_axis=new_a_axis,
+                        b_axis=new_b_axis,
+                        resolution=15
+                    )
 
-    # Filter points inside the ellipsoid
-    filtered_cloud = filter_points_in_ellipsoid(point_cloud, p_center=center, l_axes=axes_lengths)
+                except ValueError:
+                    print("Invalid input. Please enter numeric values.")
+            else:
+                print("Invalid input. Please respond with 'y' or 'n'.")
 
-    # Visualize and save filtered point cloud
-    o3d_visualizer(window_name="Filtered Point Cloud", geom1=filtered_cloud, save=False)
+        # Filter points inside the ellipsoid
+        filtered_cloud = filter_points_in_ellipsoid(point_cloud, p_center=center, l_axes=axes_lengths)
+
+        while True:
+            # Visualize and save filtered point cloud
+            o3d_visualizer(window_name="Filtered Point Cloud", geom1=filtered_cloud, save=False)
+
+            user_input_2 = input("Is the cloud clean? (y/n): ").lower().strip()
+            if user_input_2 == "y":
+                print("Saving filtered point cloud...")
+                o3d.io.write_point_cloud("saved_clouds/filtered_" + point_cloud_name, filtered_cloud)
+                print("Filtered point cloud saved as 'filtered_" + point_cloud_name + "'.")
+                print("Process complete.")
+                exit()
+
+            elif user_input_2 == "n":
+                print("Restarting ellipsoid fitting process to clean the cloud further.")
+                point_cloud = filtered_cloud  # Update the point cloud for further filtering
+                break
+
+            else:
+                print("Invalid input. Please respond with 'y' or 'n'.")
