@@ -4,7 +4,6 @@ import open3d as o3d
 import numpy as np
 from open3d.cpu.pybind.geometry import PointCloud
 from process_cloud import o3d_visualizer
-import tkinter as tk
 from tkinter import simpledialog, messagebox, Tk
 
 
@@ -101,6 +100,10 @@ if __name__ == "__main__":
         print("Please select one or two points: ")
         selected_indices = o3d_visualizer(window_name=point_cloud_name, geom1=point_cloud, save=False)
 
+        if not selected_indices:
+            print("No points selected. The cloud is considered clean.")
+            break
+
         # Create ellipsoid based on the two points selected
         ellipsoid, center, axes_lengths = create_ellipsoid(point_cloud, selected_indices)
 
@@ -141,24 +144,15 @@ if __name__ == "__main__":
 
         # Filter points inside the ellipsoid
         filtered_cloud = filter_points_in_ellipsoid(point_cloud, p_center=center, l_axes=axes_lengths)
+        point_cloud = filtered_cloud
 
-        while True:
-            # Visualize and save filtered point cloud
-            o3d_visualizer(window_name="Filtered Point Cloud", geom1=filtered_cloud, save=False)
-
-            user_input_2 = messagebox.askyesnocancel("Validation", "Is the cloud clean?")
-            if user_input_2 is True:
-                print("Saving filtered point cloud...")
-                o3d.io.write_point_cloud("saved_clouds/filtered_" + point_cloud_name, filtered_cloud)
-                print("Filtered point cloud saved as 'filtered_" + point_cloud_name + "'.")
-                print("Process complete.")
-                exit()
-
-            elif user_input_2 is False:
-                print("Restarting ellipsoid fitting process to clean the cloud further.")
-                point_cloud = filtered_cloud  # Update the point cloud for further filtering
-                break
-
-            elif user_input_2 is None:
-                print("Operation cancelled")
-                exit()
+    user_input_2 = messagebox.askyesnocancel("Save", "Do you want to save the cloud?")
+    if user_input_2 is True:
+        print("Saving filtered point cloud...")
+        o3d.io.write_point_cloud("saved_clouds/filtered_" + point_cloud_name, point_cloud)
+        print("Filtered point cloud saved as 'filtered_" + point_cloud_name + "'.")
+    elif user_input_2 is False:
+        print("Process complete.")
+    elif user_input_2 is None:
+        print("Operation canceled")
+        exit()
