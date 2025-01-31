@@ -131,7 +131,7 @@ if __name__ == "__main__":
 
     # Position the cut on the point
     cut_position = selected_points_coordinates[0][0]
-    thickness = 2
+    thickness = simpledialog.askfloat("Thickness of the cross-section", "Cross-section thickness: ")
     cross_section_pc = extract_cross_section(point_cloud, cut_position, thickness)
 
     # Selecting point in the cross-section from which the Bounding Box is created
