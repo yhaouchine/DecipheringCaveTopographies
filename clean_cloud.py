@@ -4,6 +4,8 @@ import open3d as o3d
 import numpy as np
 from open3d.cpu.pybind.geometry import PointCloud
 from process_cloud import o3d_visualizer
+import tkinter as tk
+from tkinter import simpledialog, messagebox, Tk
 
 
 def create_ellipsoid(pc: o3d.geometry.PointCloud, selected_i: list[int], resolution: int = 15,
@@ -106,19 +108,21 @@ if __name__ == "__main__":
             # Visualize the point cloud with the ellipsoid
             o3d_visualizer(window_name="Point Cloud with Ellipsoid", geom1=point_cloud, geom2=ellipsoid)
 
-            user_input = input("Does the ellipsoid fit the points? (y/n): ").lower().strip()
+            root = Tk()
+            root.withdraw()
+            user_input = messagebox.askyesnocancel("Validation", "Does the ellipsoid fit the points?")
 
-            if user_input == "y":
+            if user_input is True:
                 print("Ellipsoid confirmed. Removing points within...")
                 break
 
-            elif user_input == "n":
+            elif user_input is False:
                 try:
-                    new_a_axis = float(input("Enter new value for a-axis length: "))
-                    new_b_axis = float(input("Enter new value for b-axis length: "))
+                    new_a_axis = simpledialog.askfloat("Input", "Enter new value for a-axis length:")
+                    new_b_axis = simpledialog.askfloat("Input", "Enter new value for b-axis length:")
                     new_c_axis = 1.0
                     if len(selected_indices) == 1:
-                        new_c_axis = float(input("Enter new value for c-axis length: "))
+                        new_c_axis = simpledialog.askfloat("Input", "Enter new value for c-axis length:")
 
                     ellipsoid, center, axes_lengths = create_ellipsoid(
                         point_cloud,
@@ -131,8 +135,9 @@ if __name__ == "__main__":
 
                 except ValueError:
                     print("Invalid input. Please enter numeric values.")
-            else:
-                print("Invalid input. Please respond with 'y' or 'n'.")
+            elif user_input is None:
+                print("Operation canceled")
+                exit()
 
         # Filter points inside the ellipsoid
         filtered_cloud = filter_points_in_ellipsoid(point_cloud, p_center=center, l_axes=axes_lengths)
@@ -141,18 +146,19 @@ if __name__ == "__main__":
             # Visualize and save filtered point cloud
             o3d_visualizer(window_name="Filtered Point Cloud", geom1=filtered_cloud, save=False)
 
-            user_input_2 = input("Is the cloud clean? (y/n): ").lower().strip()
-            if user_input_2 == "y":
+            user_input_2 = messagebox.askyesnocancel("Validation", "Is the cloud clean?")
+            if user_input_2 is True:
                 print("Saving filtered point cloud...")
                 o3d.io.write_point_cloud("saved_clouds/filtered_" + point_cloud_name, filtered_cloud)
                 print("Filtered point cloud saved as 'filtered_" + point_cloud_name + "'.")
                 print("Process complete.")
                 exit()
 
-            elif user_input_2 == "n":
+            elif user_input_2 is False:
                 print("Restarting ellipsoid fitting process to clean the cloud further.")
                 point_cloud = filtered_cloud  # Update the point cloud for further filtering
                 break
 
-            else:
-                print("Invalid input. Please respond with 'y' or 'n'.")
+            elif user_input_2 is None:
+                print("Operation cancelled")
+                exit()

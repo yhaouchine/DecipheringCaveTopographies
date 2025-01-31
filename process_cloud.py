@@ -10,6 +10,8 @@ import open3d as o3d
 import numpy as np
 from open3d.cpu.pybind.geometry import PointCloud, Geometry, AxisAlignedBoundingBox
 from pathlib import Path
+import tkinter as tk
+from tkinter import simpledialog, messagebox, Tk
 
 background_color = {
     "white": [1.0, 1.0, 1.0],
@@ -57,17 +59,20 @@ def o3d_visualizer(window_name: str, geom1: Geometry = None, geom2: Geometry = N
         visualizer.add_geometry(geom1)
     visualizer.run()
 
+    root = Tk()
+    root.withdraw()
+
     # Saved the point cloud if asked
     if geom1 and save:
         if not filename:
-            filename = input("Provide a name for the point cloud file (with extension, e.g. 'cloud.ply'): ")
+            filename = simpledialog.askstring("File Name", "Enter a name for the point cloud (e.g., 'cloud.ply'):")
             save_path = save_folder / filename
             o3d.io.write_point_cloud(str(save_path), geom1)
             print(f"Point cloud saved as: {save_path}")
     elif geom1 and save is None:
-        user_input = input("Do you want to save the point cloud? (y/n): ").strip().lower()
-        if user_input == 'y':
-            filename = input("Provide a name for the point cloud file (with extension, e.g. 'cloud.ply'): ")
+        user_choice = messagebox.askyesnocancel("Save Point Cloud", "Do you want to save the point cloud?")
+        if user_choice is True:
+            filename = simpledialog.askstring("File Name", "Enter a name for the point cloud (e.g., 'cloud.ply'):")
             save_path = save_folder / filename
             o3d.io.write_point_cloud(str(save_path), geom1)
             print(f"Point cloud saved as: {save_path}")
@@ -148,11 +153,12 @@ if __name__ == "__main__":
     # Visualize the filtered point cloud
     visualizer3 = o3d_visualizer(window_name="Points within the bounding box", geom1=filtered_pc)
 
-# TODO: ajouter une ellipse autour d'un point central et retirer les points
-# tester différentes formes
-# partir d'une forme initiale et faire attirer la surface de base par les points du nuage (DSI)
-# regarder graphite
-# regarder ce qui se fait deja sur les maillages
-# garder un attribut de rugosité passée après lissage
-# placer disques qui dépendent de la courbure, calculer direction et position moyenne (Laplacien)
-# regarder outils pour calculer et exporter des propriétés
+# TODO:
+#   Ajouter une ellipse autour d'un point central et retirer les points (done)
+#   Tester différentes formes
+#   Discrete Smoothing Interpolator (D.S.I) partir de forme ini, faire attirer la surface par les points du nuage
+#   Manipuler le geogram graphite
+#   regarder ce qui se fait deja sur les maillages
+#   garder un attribut de rugosité passée après lissage
+#   placer disques qui dépendent de la courbure, calculer direction et position moyenne (Laplacien)
+#   regarder outils pour calculer et exporter des propriétés
