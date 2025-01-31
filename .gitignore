@@ -6,6 +6,7 @@ __pycache__/
 
 point_clouds/
 saved_clouds/
+images/
 .idea
 Thumbs.db
 
