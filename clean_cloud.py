@@ -148,9 +148,11 @@ if __name__ == "__main__":
 
     user_input_2 = messagebox.askyesnocancel("Save", "Do you want to save the cloud?")
     if user_input_2 is True:
+        saved_point_cloud_name = simpledialog.askstring("Filename",
+                                                        "Name of the file with extension (e.g. Cloud.ply): ")
         print("Saving filtered point cloud...")
-        o3d.io.write_point_cloud("saved_clouds/filtered_" + point_cloud_name, point_cloud)
-        print("Filtered point cloud saved as 'filtered_" + point_cloud_name + "'.")
+        o3d.io.write_point_cloud("saved_clouds/filtered_" + saved_point_cloud_name, point_cloud)
+        print("Filtered point cloud saved as " + saved_point_cloud_name + "'.")
     elif user_input_2 is False:
         print("Process complete.")
     elif user_input_2 is None:
