@@ -41,16 +41,18 @@ def create_ellipsoid(pc: o3d.geometry.PointCloud, selected_i: list[int], resolut
     l_axes = [a_axis / 2, b_axis / 2, c_axis / 2]  # Semi-axes lengths
 
     # Create a unit sphere and transform it into an ellipsoid
-    meshed_ellipsoid = o3d.geometry.TriangleMesh.create_sphere(radius=1.0, resolution=resolution)
-    meshed_ellipsoid.scale(1.0, meshed_ellipsoid.get_center())  # Ensure unit sphere scaling
-    scaling_matrix = np.diag([l_axes[0], l_axes[1], l_axes[2], 1.0])
-    meshed_ellipsoid.transform(scaling_matrix)  # Scale axes
-    meshed_ellipsoid.translate(center_point)  # Translate to center
+    meshed_ellipsoid = o3d.geometry.TriangleMesh.create_sphere(radius=1.0,
+                                                               resolution=resolution)  # Create a unit sphere
+    meshed_ellipsoid.scale(1.0, meshed_ellipsoid.get_center())  # Ensure unit sphere scaling and center
+    scaling_matrix = np.diag(
+        [l_axes[0], l_axes[1], l_axes[2], 1.0])  # Create the scaling matrix to transform the ellipsoid
+    meshed_ellipsoid.transform(scaling_matrix)  # Transform the ellipsoid with the scaling matrix
+    meshed_ellipsoid.translate(center_point)  # Translate the ellipsoid to center point calculated
 
     # Convert the mesh to wireframe using edges
     edges = []
-    for triangle in np.asarray(meshed_ellipsoid.triangles):
-        edges.append([triangle[0], triangle[1]])
+    for triangle in np.asarray(meshed_ellipsoid.triangles):  # Iterate each triangle of the mesh
+        edges.append([triangle[0], triangle[1]])    # Each vertex of the triangle is linked to its neighbors
         edges.append([triangle[1], triangle[2]])
         edges.append([triangle[2], triangle[0]])
 
@@ -58,12 +60,12 @@ def create_ellipsoid(pc: o3d.geometry.PointCloud, selected_i: list[int], resolut
     unique_edges = np.unique(edges, axis=0)  # Remove duplicate edges
     lines = unique_edges.tolist()
 
-    # Extract points from the mesh
+    # Create a LineSet object to display the ellipsoid as a wireframe
     points = np.asarray(meshed_ellipsoid.vertices)
     line_set = o3d.geometry.LineSet()
     line_set.points = o3d.utility.Vector3dVector(points)
     line_set.lines = o3d.utility.Vector2iVector(lines)
-    line_set.paint_uniform_color([1, 0, 0])  # Red wireframe
+    line_set.paint_uniform_color([1, 0, 0])  # Red color for the wireframe
 
     return line_set, center_point, l_axes
 
@@ -77,16 +79,16 @@ def filter_points_in_ellipsoid(pc: PointCloud, p_center: np.ndarray, l_axes: lis
     @param l_axes: Lengths of the semi-axes (a, b, c).
     @return: Filtered point cloud.
     """
-    points = np.asarray(pc.points)
-    relative_positions = points - p_center
+    points = np.asarray(pc.points)      # Transform the point cloud into a numpy array
+    relative_positions = points - p_center  # Calculate the position of the points to the center of the ellipsoid
     normalized_distances = (
-            (relative_positions[:, 0] / l_axes[0]) ** 2
-            + (relative_positions[:, 1] / l_axes[1]) ** 2
+            (relative_positions[:, 0] / l_axes[0]) ** 2     # Calculate the normalized distance of the point
+            + (relative_positions[:, 1] / l_axes[1]) ** 2   # If distance <= 1 the point is inside the ellipsoid
             + (relative_positions[:, 2] / l_axes[2]) ** 2
     )
-    mask = normalized_distances > 1.0  # Points outside ellipsoid
+    mask = normalized_distances > 1.0  # Create a mask, True if the point is outside, False if it is inside
     filtered_points = points[mask]
-    filtered_pc = o3d.geometry.PointCloud()
+    filtered_pc = o3d.geometry.PointCloud()     # Create new Point Cloud with the points outside the ellipsoid
     filtered_pc.points = o3d.utility.Vector3dVector(filtered_points)
     return filtered_pc
 

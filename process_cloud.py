@@ -10,8 +10,9 @@ import open3d as o3d
 import numpy as np
 from open3d.cpu.pybind.geometry import PointCloud, Geometry, AxisAlignedBoundingBox
 from pathlib import Path
-import tkinter as tk
+# import tkinter as tk
 from tkinter import simpledialog, messagebox, Tk
+# import warnings
 
 background_color = {
     "white": [1.0, 1.0, 1.0],
@@ -55,6 +56,14 @@ def o3d_visualizer(window_name: str, geom1: Geometry = None, geom2: Geometry = N
     visualizer = o3d.visualization.VisualizerWithEditing()
     visualizer.create_window(window_name=window_name, width=1280, height=800)
     visualizer.get_render_option().background_color = back_color
+
+    # Visualizer manipulation infos
+    print("Press X, Y or W key to change the camera angle according to X, Y and Z axes")
+    print("Press K key to lock the view and enter the selection mode")
+    print("Press C key to keep what is selected")
+    print("Press S key to save the selection")
+    print("Press F key to enter free-view mode")
+
     if geom1:
         visualizer.add_geometry(geom1)
     visualizer.run()
@@ -82,7 +91,7 @@ def o3d_visualizer(window_name: str, geom1: Geometry = None, geom2: Geometry = N
     return picked_points
 
 
-def extract_cross_section(pc: PointCloud, position: np.ndarray, e: float | int) -> PointCloud:
+'''def extract_cross_section(pc: PointCloud, position: np.ndarray, e: float | int) -> PointCloud:
     """
     Function to extract a cross-section from a point cloud
 
@@ -91,24 +100,29 @@ def extract_cross_section(pc: PointCloud, position: np.ndarray, e: float | int) 
     @param e: Thickness of the cross-section
     @return: The cross-section point cloud
     """
+
+    warnings.simplefilter("default", DeprecationWarning)
+    warnings.warn("This function is obsolete, please use the default manipulation tools of Open3D", DeprecationWarning)
     points = np.asarray(pc.points)
     mask = (points[:, 0] > position - e / 2) & (points[:, 0] < position + e / 2)
     cut_points = points[mask]
     cut_pc = o3d.geometry.PointCloud()
     cut_pc.points = o3d.utility.Vector3dVector(cut_points)
-    return cut_pc
+    return cut_pc'''
 
 
-def create_bounding_box(center_point: np.ndarray, size: float | int) -> AxisAlignedBoundingBox:
+'''def create_bounding_box(center_point: np.ndarray, size: float | int) -> AxisAlignedBoundingBox:
     """
     Function to create a bounding box
+    
     @param center_point: Point representing the center of the bounding box
     @param size: Range of the bounding box centered on the center point
     @return: Bounding box object
     """
+    
     min_bound = center_point - size / 2
     max_bound = center_point + size / 2
-    return o3d.geometry.AxisAlignedBoundingBox(min_bound, max_bound)
+    return o3d.geometry.AxisAlignedBoundingBox(min_bound, max_bound)'''
 
 
 if __name__ == "__main__":
@@ -130,28 +144,29 @@ if __name__ == "__main__":
     selected_points_coordinates = np.asarray(selected_points.points)
 
     # Position the cut on the point
-    cut_position = selected_points_coordinates[0][0]
-    thickness = simpledialog.askfloat("Thickness of the cross-section", "Cross-section thickness: ")
-    cross_section_pc = extract_cross_section(point_cloud, cut_position, thickness)
+    # cut_position = selected_points_coordinates[0][0]
+    # thickness = simpledialog.askfloat("Thickness of the cross-section", "Cross-section thickness: ")
+    # cross_section_pc = extract_cross_section(point_cloud, cut_position, thickness)
 
     # Selecting point in the cross-section from which the Bounding Box is created
-    center_index = o3d_visualizer(window_name=point_cloud_name + ": Cross-section", geom1=cross_section_pc)
-    if not center_index:
-        print("No point selected in cross-section. Exiting.")
-        sys.exit()
+    # center_index = o3d_visualizer(window_name=point_cloud_name + ": Cross-section", geom1=cross_section_pc)
+    # if not center_index:
+    #    print("No point selected in cross-section. Exiting.")
+    #    sys.exit()
 
-    bbox_center = np.asarray(cross_section_pc.points)[center_index[0]]
-    bbox_size = 2
-    bbox = create_bounding_box(bbox_center, bbox_size)
-    bbox.color = [1.0, 0.0, 0.0]
+    # bbox_center = np.asarray(cross_section_pc.points)[center_index[0]]
+    # bbox_size = 2
+    # bbox = create_bounding_box(bbox_center, bbox_size)
+    # bbox.color = [1.0, 0.0, 0.0]
 
-    visualizer2 = o3d_visualizer(window_name="Cross-section and bounding box", geom1=cross_section_pc, geom2=bbox)
+    # visualizer2 = o3d_visualizer(window_name="Cross-section and bounding box", geom1=cross_section_pc, geom2=bbox)
 
     # Filter points outside the bounding box
-    filtered_pc = cross_section_pc.crop(bbox)
+    # filtered_pc = cross_section_pc.crop(bbox)
 
     # Visualize the filtered point cloud
-    visualizer3 = o3d_visualizer(window_name="Points within the bounding box", geom1=filtered_pc)
+    # visualizer3 = o3d_visualizer(window_name="Points within the bounding box", geom1=filtered_pc)
+
 
 # TODO:
 #   Ajouter une ellipse autour d'un point central et retirer les points (done)
