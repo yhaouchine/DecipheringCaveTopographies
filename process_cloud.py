@@ -12,6 +12,7 @@ from open3d.cpu.pybind.geometry import PointCloud, Geometry, AxisAlignedBounding
 from pathlib import Path
 # import tkinter as tk
 from tkinter import simpledialog, messagebox, Tk
+
 # import warnings
 
 background_color = {
@@ -110,7 +111,6 @@ def o3d_visualizer(window_name: str, geom1: Geometry = None, geom2: Geometry = N
     cut_pc.points = o3d.utility.Vector3dVector(cut_points)
     return cut_pc'''
 
-
 '''def create_bounding_box(center_point: np.ndarray, size: float | int) -> AxisAlignedBoundingBox:
     """
     Function to create a bounding box
@@ -123,7 +123,6 @@ def o3d_visualizer(window_name: str, geom1: Geometry = None, geom2: Geometry = N
     min_bound = center_point - size / 2
     max_bound = center_point + size / 2
     return o3d.geometry.AxisAlignedBoundingBox(min_bound, max_bound)'''
-
 
 if __name__ == "__main__":
 
@@ -166,14 +165,3 @@ if __name__ == "__main__":
 
     # Visualize the filtered point cloud
     # visualizer3 = o3d_visualizer(window_name="Points within the bounding box", geom1=filtered_pc)
-
-
-# TODO:
-#   Ajouter une ellipse autour d'un point central et retirer les points (done)
-#   Tester différentes formes
-#   Discrete Smoothing Interpolator (D.S.I) partir de forme ini, faire attirer la surface par les points du nuage
-#   Manipuler le geogram graphite
-#   regarder ce qui se fait deja sur les maillages
-#   garder un attribut de rugosité passée après lissage
-#   placer disques qui dépendent de la courbure, calculer direction et position moyenne (Laplacien)
-#   regarder outils pour calculer et exporter des propriétés
