@@ -1,70 +1,39 @@
-import open3d as o3d
 import numpy as np
-from scipy.spatial import ConvexHull, KDTree
+import matplotlib.pyplot as plt
+import open3d as o3d
+import alphashape
 
-def angle_between_vectors(v1, v2):
-    """Retourne l'angle entre deux vecteurs en radians."""
-    v1 = v1.astype(np.float64)  # Convertir en float64
-    v2 = v2.astype(np.float64)  # Convertir en float64
-    v1 /= np.linalg.norm(v1)
-    v2 /= np.linalg.norm(v2)
-    return np.arccos(np.clip(np.dot(v1, v2), -1.0, 1.0))
-
-
-# Charger le nuage de points
+# Importing the cloud
 point_cloud_name = "filtered_cross_section_clean.ply"
 point_cloud = o3d.io.read_point_cloud("saved_clouds/" + point_cloud_name)
 
-# Réduction du nuage de points
-point_cloud = point_cloud.voxel_down_sample(voxel_size=4.0)  # Ajuste le paramètre
+# Reducing the cloud
+point_cloud = point_cloud.voxel_down_sample(voxel_size=4.0)
 points = np.asarray(point_cloud.points)
 
-# Vérifier qu'on a assez de points
+# Verify the number of points
 if points.shape[0] < 3:
-    raise ValueError("Pas assez de points pour calculer une enveloppe convexe.")
+    raise ValueError("Not enough points to create a contour.")
 
-# Calcul de l'enveloppe convexe
-hull = ConvexHull(points)
-boundary_points = points[hull.vertices]  # Sélection des points de la coque convexe
+# Project the cloud in the 2D Y-Z plan
+points_2d = points[:, 1:3]
 
-# KDTree pour chercher les voisins
-tree = KDTree(boundary_points)
-neighbors = tree.query(boundary_points, k=4)[1]  # Prend plusieurs voisins pour éviter les erreurs
+# Calculate the alpha shape
+alpha = 0.2
+alpha_shape = alphashape.alphashape(points_2d, alpha)
 
-# Trier les voisins en fonction de l'angle pour assurer un contour continu
-ordered_edges = []
-visited = set()
-current_index = 0  # Départ du premier point de l'enveloppe
+# Displaying in 3D
+plt.figure(figsize=(8, 6))
+plt.scatter(points_2d[:, 0], points_2d[:, 1], c='blue', label="Projected points")
 
-for _ in range(len(boundary_points) - 1):
-    visited.add(current_index)
-    current_point = boundary_points[current_index]
+# Displaying the alpha shape
+if alpha_shape:
+    x, y = alpha_shape.exterior.xy
+    plt.plot(x, y, 'r-', label="Alpha-shape")
 
-    # Trouver le meilleur voisin basé sur l'angle
-    best_index = None
-    best_angle = float('inf')
-    ref_vector = np.array([1, 0, 0])  # Référence de direction
-
-    for idx in neighbors[current_index]:
-        if idx in visited:
-            continue
-
-        candidate_vector = boundary_points[idx] - current_point
-        angle = angle_between_vectors(ref_vector, candidate_vector)
-
-        if angle < best_angle:
-            best_angle = angle
-            best_index = idx
-
-    if best_index is not None:
-        ordered_edges.append([current_index, best_index])
-        current_index = best_index
-
-# Création du LineSet pour Open3D
-line_set = o3d.geometry.LineSet()
-line_set.points = o3d.utility.Vector3dVector(boundary_points)
-line_set.lines = o3d.utility.Vector2iVector(np.array(ordered_edges, dtype=np.int32))
-line_set.colors = o3d.utility.Vector3dVector([[1, 0, 0]] * len(ordered_edges))  # Rouge
-
-# Affichage
-o3d.visualization.draw_geometries([point_cloud, line_set])
+plt.legend()
+plt.title("2D Projection & Alpha-shape")
+plt.xlabel("Y")
+plt.ylabel("Z")
+plt.axis("equal")
+plt.show()
