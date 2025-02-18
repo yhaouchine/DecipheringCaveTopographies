@@ -94,7 +94,7 @@ def filter_points_in_ellipsoid(pc: PointCloud, p_center: np.ndarray, l_axes: lis
 
 
 if __name__ == "__main__":
-    point_cloud, point_cloud_name = import_cloud(pc_name="section_with_irrelevant_pts_2.ply",
+    point_cloud, point_cloud_name = import_cloud(pc_name="cross_section_2.ply",
                                                  parent_folder="saved_clouds/")
 
     while True:
@@ -153,7 +153,7 @@ if __name__ == "__main__":
         saved_point_cloud_name = simpledialog.askstring("Filename",
                                                         "Name of the file with extension (e.g. Cloud.ply): ")
         print("Saving filtered point cloud...")
-        o3d.io.write_point_cloud("saved_clouds/filtered_" + saved_point_cloud_name, point_cloud)
+        o3d.io.write_point_cloud("saved_clouds/" + saved_point_cloud_name, point_cloud)
         print("Filtered point cloud saved as " + saved_point_cloud_name + "'.")
     elif user_input_2 is False:
         print("Process complete.")
