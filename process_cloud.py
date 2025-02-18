@@ -8,7 +8,7 @@ __date__ = "novembre 2024"
 import sys
 import open3d as o3d
 import numpy as np
-from open3d.cpu.pybind.geometry import PointCloud, Geometry, AxisAlignedBoundingBox
+from open3d.cpu.pybind.geometry import PointCloud, Geometry  # ,AxisAlignedBoundingBox
 from pathlib import Path
 # import tkinter as tk
 from tkinter import simpledialog, messagebox, Tk
@@ -20,6 +20,20 @@ background_color = {
     "grey": [0.5, 0.5, 0.5],
     "black": [0.0, 0.0, 0.0],
 }
+
+
+def import_cloud(pc_name: str, parent_folder: str) -> PointCloud | tuple:
+    """
+    Import point cloud with Open3D.
+
+    @param pc_name: name of the point cloud file
+    @param parent_folder: name of the folder containing the point cloud
+    @return: The point cloud
+    """
+    pc_name = pc_name
+    folder = parent_folder + "/"
+    pc = o3d.io.read_point_cloud(folder + pc_name)
+    return pc, pc_name
 
 
 def o3d_visualizer(window_name: str, geom1: Geometry = None, geom2: Geometry = None, save: bool | None = None,

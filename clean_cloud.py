@@ -3,7 +3,7 @@
 import open3d as o3d
 import numpy as np
 from open3d.cpu.pybind.geometry import PointCloud
-from process_cloud import o3d_visualizer
+from process_cloud import o3d_visualizer, import_cloud
 from tkinter import simpledialog, messagebox, Tk
 
 
@@ -52,7 +52,7 @@ def create_ellipsoid(pc: o3d.geometry.PointCloud, selected_i: list[int], resolut
     # Convert the mesh to wireframe using edges
     edges = []
     for triangle in np.asarray(meshed_ellipsoid.triangles):  # Iterate each triangle of the mesh
-        edges.append([triangle[0], triangle[1]])    # Each vertex of the triangle is linked to its neighbors
+        edges.append([triangle[0], triangle[1]])  # Each vertex of the triangle is linked to its neighbors
         edges.append([triangle[1], triangle[2]])
         edges.append([triangle[2], triangle[0]])
 
@@ -79,23 +79,23 @@ def filter_points_in_ellipsoid(pc: PointCloud, p_center: np.ndarray, l_axes: lis
     @param l_axes: Lengths of the semi-axes (a, b, c).
     @return: Filtered point cloud.
     """
-    points = np.asarray(pc.points)      # Transform the point cloud into a numpy array
+    points = np.asarray(pc.points)  # Transform the point cloud into a numpy array
     relative_positions = points - p_center  # Calculate the position of the points to the center of the ellipsoid
     normalized_distances = (
-            (relative_positions[:, 0] / l_axes[0]) ** 2     # Calculate the normalized distance of the point
-            + (relative_positions[:, 1] / l_axes[1]) ** 2   # If distance <= 1 the point is inside the ellipsoid
+            (relative_positions[:, 0] / l_axes[0]) ** 2  # Calculate the normalized distance of the point
+            + (relative_positions[:, 1] / l_axes[1]) ** 2  # If distance <= 1 the point is inside the ellipsoid
             + (relative_positions[:, 2] / l_axes[2]) ** 2
     )
     mask = normalized_distances > 1.0  # Create a mask, True if the point is outside, False if it is inside
     filtered_points = points[mask]
-    filtered_pc = o3d.geometry.PointCloud()     # Create new Point Cloud with the points outside the ellipsoid
+    filtered_pc = o3d.geometry.PointCloud()  # Create new Point Cloud with the points outside the ellipsoid
     filtered_pc.points = o3d.utility.Vector3dVector(filtered_points)
     return filtered_pc
 
 
 if __name__ == "__main__":
-    point_cloud_name = "section_with_irrelevant_pts_2.ply"
-    point_cloud = o3d.io.read_point_cloud("saved_clouds/" + point_cloud_name)
+    point_cloud, point_cloud_name = import_cloud(pc_name="section_with_irrelevant_pts_2.ply",
+                                                 parent_folder="saved_clouds/")
 
     while True:
         # Select points
