@@ -36,6 +36,8 @@ def create_ellipsoid(pc: o3d.geometry.PointCloud, selected_i: list[int], resolut
         c_axis = np.linalg.norm(z_top - z_bottom)
     elif len(selected_i) == 1:
         center_point = np.asarray(pc.points)[selected_i[0]]
+    else:
+        raise ValueError("The number of selected points must be 1 or 2.")
 
     # Define axes lengths
     l_axes = [a_axis / 2, b_axis / 2, c_axis / 2]  # Semi-axes lengths
@@ -94,7 +96,7 @@ def filter_points_in_ellipsoid(pc: PointCloud, p_center: np.ndarray, l_axes: lis
 
 
 if __name__ == "__main__":
-    point_cloud, point_cloud_name = import_cloud(pc_name="cross_section_2.ply",
+    point_cloud, point_cloud_name = import_cloud(pc_name="cross_section_3_45d.ply",
                                                  parent_folder="saved_clouds/")
 
     while True:
