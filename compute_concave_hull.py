@@ -22,26 +22,35 @@ def compute_concave_hull_2d(pts_2d: np.ndarray, c: float = 1.0, l_threshold: flo
     return hull
 
 
-def display(pts: np.ndarray, contour: np.ndarray, vox_size1: float, vox_size2: float) -> None:
+def display(pts: np.ndarray, contour: np.ndarray, contour_2d: np.ndarray, vox_size1: float, vox_size2: float) -> None:
+    # Affichage 3D et 2D côte à côte dans une figure
     fig = plt.figure(figsize=(16, 8))
-    ax = fig.add_subplot(111, projection='3d')
 
-    # Plot the original point cloud
-    ax.scatter(pts[:, 0], pts[:, 1], pts[:, 2], c='blue', s=1, label=f"Point cloud (voxel size = {vox_size2})")
+    # Affichage 3D
+    ax3d = fig.add_subplot(121, projection='3d')
+    ax3d.scatter(pts[:, 0], pts[:, 1], pts[:, 2], c='blue', s=1,
+                 label=f"Point cloud (voxel size = {vox_size2})")
+    ax3d.plot(contour[:, 0], contour[:, 1], contour[:, 2], 'r--', linewidth=2.0,
+              label=f"Concave hull (voxel size = {vox_size1})")
+    ax3d.set_title("3D Point Cloud & Contour")
+    ax3d.set_xlabel("X")
+    ax3d.set_ylabel("Y")
+    ax3d.set_zlabel("Z")
+    ax3d.legend()
+    ax3d.axis("equal")
 
-    # Plot the contour
-    ax.plot(contour[:, 0], contour[:, 1], contour[:, 2], 'r--', linewidth=1.5,
-            label=f"Concave hull (voxel size = {vox_size1})")
+    # Affichage 2D (projection YZ)
+    ax2d = fig.add_subplot(122)
+    ax2d.plot(contour_2d[:, 0], contour_2d[:, 1], 'r--', linewidth=2.0, label="Concave hull (YZ projection)")
+    ax2d.scatter(contour_2d[:, 0], contour_2d[:, 1], c='red', s=10)
+    ax2d.set_title("2D Concave Hull (YZ Projection)")
+    ax2d.set_xlabel("Y")
+    ax2d.set_ylabel("Z")
+    ax2d.legend()
+    ax2d.axis("equal")
 
-    ax.set_title("3D Point Cloud & Contour")
-    ax.set_xlabel("X")
-    ax.set_ylabel("Y")
-    ax.set_zlabel("Z")
-    plt.axis("equal")
     plt.tight_layout()
-    ax.legend()
     plt.show()
-    return
 
 
 if __name__ == "__main__":
@@ -73,4 +82,4 @@ if __name__ == "__main__":
     # Build the 3D contour with the original X coordinates of the points
     contour_3d = points_reduced[indices_3d]
 
-    display(pts=points_displayed, contour=contour_3d, vox_size1=v_size_1, vox_size2=v_size_2)
+    display(pts=points_displayed, contour=contour_3d, contour_2d=hull_2d, vox_size1=v_size_1, vox_size2=v_size_2)
