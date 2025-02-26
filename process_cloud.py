@@ -8,7 +8,7 @@ __date__ = "novembre 2024"
 import sys
 import open3d as o3d
 import numpy as np
-from open3d.cpu.pybind.geometry import PointCloud, Geometry, AxisAlignedBoundingBox
+from open3d.cpu.pybind.geometry import PointCloud, Geometry  # ,AxisAlignedBoundingBox
 from pathlib import Path
 # import tkinter as tk
 from tkinter import simpledialog, messagebox, Tk
@@ -20,6 +20,20 @@ background_color = {
     "grey": [0.5, 0.5, 0.5],
     "black": [0.0, 0.0, 0.0],
 }
+
+
+def import_cloud(pc_name: str, parent_folder: str) -> PointCloud | tuple:
+    """
+    Import point cloud with Open3D.
+
+    @param pc_name: name of the point cloud file
+    @param parent_folder: name of the folder containing the point cloud
+    @return: The point cloud
+    """
+    pc_name = pc_name
+    folder = parent_folder + "/"
+    pc = o3d.io.read_point_cloud(folder + pc_name)
+    return pc, pc_name
 
 
 def o3d_visualizer(window_name: str, geom1: Geometry = None, geom2: Geometry = None, save: bool | None = None,
@@ -165,3 +179,13 @@ if __name__ == "__main__":
 
     # Visualize the filtered point cloud
     # visualizer3 = o3d_visualizer(window_name="Points within the bounding box", geom1=filtered_pc)
+
+# TODO:
+#   Ajouter une valeur de tolérance pour l'épaisseur de la courbe, avec une valeur par défaut et une demande à l'utilisateur.
+#   Possibilité de faire plusieurs coupes avec une distance entre les coupes constantes, ou des coupes à placer manuellement.
+#   Projeter en 2D puis faire la réduction du nuage avec les voxels ?
+#   Ne pas re projeter en 3D car ce n'est pas utile.
+#   Documenter toutes les méthodes utilisées. Pourquoi préférer une méthode à une autre ?
+#   Utiliser des class.
+#   Utiliser une PCA pour projeter les points dans le cas ou la coupe n'est pas parfaitement alignée avec un axe.
+#   Calculer aire de la surface afin de quantifier la performance du contour.
