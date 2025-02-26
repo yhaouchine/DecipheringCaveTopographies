@@ -179,3 +179,13 @@ if __name__ == "__main__":
 
     # Visualize the filtered point cloud
     # visualizer3 = o3d_visualizer(window_name="Points within the bounding box", geom1=filtered_pc)
+
+# TODO:
+#   Ajouter une valeur de tolérance pour l'épaisseur de la courbe, avec une valeur par défaut et une demande à l'utilisateur.
+#   Possibilité de faire plusieurs coupes avec une distance entre les coupes constantes, ou des coupes à placer manuellement.
+#   Projeter en 2D puis faire la réduction du nuage avec les voxels ?
+#   Ne pas re projeter en 3D car ce n'est pas utile.
+#   Documenter toutes les méthodes utilisées. Pourquoi préférer une méthode à une autre ?
+#   Utiliser des class.
+#   Utiliser une PCA pour projeter les points dans le cas ou la coupe n'est pas parfaitement alignée avec un axe.
+#   Calculer aire de la surface afin de quantifier la performance du contour.
