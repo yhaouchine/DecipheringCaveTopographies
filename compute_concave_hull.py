@@ -1,9 +1,7 @@
 import numpy as np
 from scipy.spatial import KDTree
-import matplotlib.pyplot as plt
-from process_cloud import import_cloud
+from process_cloud import import_cloud, display, compute_area
 from concave_hull import concave_hull
-from convex_hull import display, compute_area
 
 
 def compute_concave_hull_2d(pts_2d: np.ndarray, c: float = 1.0, l_threshold: float = 0.0) -> np.ndarray:
