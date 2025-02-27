@@ -47,8 +47,8 @@ def display(pts: np.ndarray, contour2d: np.ndarray, contour3d: np.ndarray = None
     polygon = Polygon(contour2d, closed=True, facecolor='red', alpha=0.1, edgecolor='r', linewidth=2.0)
     ax2d.add_patch(polygon)
 
-    ax2d.plot(contour2d[:, 0], contour2d[:, 1], 'r--', linewidth=1.0, label="Concave hull (YZ projection)")
-    ax2d.scatter(contour2d[:, 0], contour2d[:, 1], c='black', s=10)
+    ax2d.plot(contour2d[:, 0], contour2d[:, 1], 'r--', linewidth=2.0, label="Concave hull (YZ projection)")
+    ax2d.scatter(pts[:, 1], pts[:, 2], c='black', s=1)
 
     text_x, _ = np.mean(contour2d, axis=0)
     _, text_y = np.max(contour2d, axis=0)
@@ -66,17 +66,16 @@ def display(pts: np.ndarray, contour2d: np.ndarray, contour3d: np.ndarray = None
 
 
 if __name__ == "__main__":
-    point_cloud, point_cloud_name = import_cloud(pc_name="cross_section_3_45d_clean.ply",
-                                                 parent_folder="saved_clouds")
+    point_cloud, point_cloud_name = import_cloud(pc_name="cross_section_3_45d_clean.ply", parent_folder="saved_clouds")
 
     # Reducing the cloud
-    v_size_1 = 2.5
+    v_size_1 = 0.1
     reduced_point_cloud = point_cloud.voxel_down_sample(voxel_size=v_size_1)
     points_reduced = np.asarray(reduced_point_cloud.points)
 
-    v_size_2 = 0.5
-    displayed_point_cloud = point_cloud.voxel_down_sample(voxel_size=v_size_2)
-    points_displayed = np.asarray(displayed_point_cloud.points)
+    #v_size_2 = 0.1
+    #displayed_point_cloud = point_cloud.voxel_down_sample(voxel_size=v_size_2)
+    points_displayed = np.asarray(point_cloud.points)
 
     # Verify the number of points
     if points_reduced.shape[0] < 3:
@@ -86,7 +85,7 @@ if __name__ == "__main__":
     points_2d = points_reduced[:, 1:3]
 
     # Calculate the alpha shape
-    alpha_shape = calculate_alpha_shape(alpha=0.45, pts=points_2d)
+    alpha_shape = calculate_alpha_shape(alpha=8.0, pts=points_2d)
 
     # Check if the alpha shape was successfully generated
     if alpha_shape is None or not hasattr(alpha_shape, "exterior"):
