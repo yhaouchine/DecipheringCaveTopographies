@@ -1,8 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import alphashape
-import scipy.optimize as opt
-from scipy.spatial import KDTree
+from matplotlib.patches import Polygon
 from process_cloud import import_cloud
 
 
@@ -25,71 +24,6 @@ def compute_area(contour2d: np.ndarray) -> float:
     return contour_area
 
 
-def energy_function(contour_free_flat: np.ndarray, points_kdtree: KDTree, alpha_smooth: float, first_point: np.ndarray,
-                    lambda_close: float = 1000) -> float:
-    """
-    Function to calculate the energy which quantify the proximity of the contour to the point cloud and its smoothness
-
-    @param contour_free_flat: The free contour (i.e. intermediate points between the first and last points)
-    @param points_kdtree: KDTree structure to search for nearby points in the point cloud
-    @param alpha_smooth: Coefficient of smoothing
-    @param first_point: First point of the contour, which is fixed to ensure the closure of the contour
-    @param lambda_close: Penalty coefficient to close the contour
-    @return:
-    """
-    # Reconstruct the closed contour
-    contour_free = contour_free_flat.reshape(-1, 2)
-    contour = np.vstack(
-        (first_point, contour_free, first_point)  # Adding first point at the beginning & end of the contour_free table
-    )
-
-    # Proximity energy
-    dists, _ = points_kdtree.query(contour)  # For each point, find the distance to its closest neighbor
-    energy_proximity = np.sum(dists ** 2)  # Calculate the energy as the sum of the squared distance
-
-    # Smoothing energy
-    diffs = np.diff(contour, axis=0)  # Calculate the segment between two consecutive points
-    energy_smooth = np.sum(np.linalg.norm(diffs, axis=1) ** 2)  # Calculate the sum of the squared length of segments
-
-    # Penalty to close the contour
-    closure_penalty = lambda_close * np.linalg.norm(contour[0] - contour[-1]) ** 2
-
-    return energy_proximity + alpha_smooth * energy_smooth + closure_penalty
-
-
-def optimize_contour(initial_contour: np.ndarray, points_kdtree: KDTree, alpha_smooth: float = 100,
-                     lambda_close: float = 1000, max_iter: int = 1000) -> np.ndarray:
-    """
-    Function to optimize the contour by reducing the energy (i.e. decreasing the distance between
-    the contour and the points of the point cloud)
-
-    @param initial_contour: Initial non-optimized contour as a 2D table
-    @param points_kdtree: A KDTree
-    @param alpha_smooth: Coefficient of smoothing
-    @param lambda_close: Coefficient of contour closure
-    @param max_iter: Number of maximum optimisation iterations
-    @return: Optimized closed contour
-    """
-
-    first_point = initial_contour[0].reshape(1, -1)
-    initial_free = initial_contour[1:-1]
-
-    res = opt.minimize(
-        fun=energy_function,
-        x0=initial_free.flatten(),
-        args=(points_kdtree, alpha_smooth, first_point, lambda_close),
-        method='L-BFGS-B',
-        options={'maxiter': max_iter}
-    )
-
-    if not res.success:
-        print("Optimization failed :", res.message)
-
-    contour_free = res.x.reshape(-1, 2)
-    closed_contour = np.vstack((first_point, contour_free, first_point))  # Assure la fermeture
-    return closed_contour
-
-
 def display(pts: np.ndarray, contour2d: np.ndarray, contour3d: np.ndarray = None) -> None:
     fig = plt.figure(figsize=(8, 8) if contour3d is None else (16, 8))
 
@@ -107,8 +41,20 @@ def display(pts: np.ndarray, contour2d: np.ndarray, contour3d: np.ndarray = None
     else:
         ax2d = fig.add_subplot(111)
 
-    ax2d.plot(contour2d[:, 0], contour2d[:, 1], 'r--', linewidth=2.0, label="Concave hull (YZ projection)")
-    ax2d.scatter(contour2d[:, 0], contour2d[:, 1], c='red', s=10)
+    area = compute_area(contour2d)
+
+    # Fill the contour with a transparent color
+    polygon = Polygon(contour2d, closed=True, facecolor='red', alpha=0.1, edgecolor='r', linewidth=2.0)
+    ax2d.add_patch(polygon)
+
+    ax2d.plot(contour2d[:, 0], contour2d[:, 1], 'r--', linewidth=1.0, label="Concave hull (YZ projection)")
+    ax2d.scatter(contour2d[:, 0], contour2d[:, 1], c='black', s=10)
+
+    text_x, _ = np.mean(contour2d, axis=0)
+    _, text_y = np.max(contour2d, axis=0)
+    ax2d.text(text_x, text_y, f"Area = {area:.2f} m²", fontsize=14, color='black', ha='center', va='top',
+              bbox=dict(facecolor='white', alpha=0.6))
+
     ax2d.set_title("2D Concave Hull (YZ Projection)")
     ax2d.set_xlabel("Y")
     ax2d.set_ylabel("Z")
@@ -148,11 +94,5 @@ if __name__ == "__main__":
 
     x, y = alpha_shape.exterior.xy
     contour_2d = np.column_stack((x, y))
-
-    # Build a KDTree to find the closest original 3D points corresponding to the 2D contour
-    tree = KDTree(points_2d)
-
-    area = compute_area(contour2d=contour_2d)
-    print(f"Area enclosed by the hull : {area:.3f} m²")
 
     display(pts=points_displayed, contour2d=contour_2d)
