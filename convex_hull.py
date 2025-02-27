@@ -11,6 +11,20 @@ def calculate_alpha_shape(alpha: float, pts: list | np.ndarray) -> any:
     return a_shape
 
 
+def compute_area(contour2d: np.ndarray) -> float:
+    """
+    Compute the area enclosed by a 2D contour using the Shoelace formula.
+
+    @param contour2d:
+    @return:
+    """
+
+    x, y = contour2d[:, 0], contour2d[:, 1]
+    contour_area = 0.5 * np.abs(np.sum(x[:-1] * y[1:] - x[1:] * y[:-1]) + (x[-1] * y[0] - x[0] * y[-1]))
+
+    return contour_area
+
+
 def energy_function(contour_free_flat: np.ndarray, points_kdtree: KDTree, alpha_smooth: float, first_point: np.ndarray,
                     lambda_close: float = 1000) -> float:
     """
@@ -76,26 +90,33 @@ def optimize_contour(initial_contour: np.ndarray, points_kdtree: KDTree, alpha_s
     return closed_contour
 
 
-def display(pts: np.ndarray, contour: np.ndarray, vox_size1: float, vox_size2: float) -> None:
-    fig = plt.figure(figsize=(16, 8))
-    ax = fig.add_subplot(111, projection='3d')
+def display(pts: np.ndarray, contour2d: np.ndarray, contour3d: np.ndarray = None) -> None:
+    fig = plt.figure(figsize=(8, 8) if contour3d is None else (16, 8))
 
-    # Plot the original point cloud
-    ax.scatter(pts[:, 0], pts[:, 1], pts[:, 2], c='blue', s=1, label=f"Point cloud (voxel size = {vox_size2})")
+    if contour3d is not None:
+        ax3d = fig.add_subplot(121, projection='3d')
+        ax3d.scatter(pts[:, 0], pts[:, 1], pts[:, 2], c='blue', s=1, label="Point cloud")
+        ax3d.plot(contour3d[:, 0], contour3d[:, 1], contour3d[:, 2], 'r--', linewidth=2.0, label="Convex hull")
+        ax3d.set_title("3D Point Cloud & Contour")
+        ax3d.set_xlabel("X")
+        ax3d.set_ylabel("Y")
+        ax3d.set_zlabel("Z")
+        ax3d.legend()
+        ax3d.axis("equal")
+        ax2d = fig.add_subplot(122)
+    else:
+        ax2d = fig.add_subplot(111)
 
-    # Plot the reconstructed 3D contour
-    ax.plot(contour[:, 0], contour[:, 1], contour[:, 2], 'r-', linewidth=2,
-            label=f"Alpha-shape 3D (voxel size = {vox_size1})")
+    ax2d.plot(contour2d[:, 0], contour2d[:, 1], 'r--', linewidth=2.0, label="Concave hull (YZ projection)")
+    ax2d.scatter(contour2d[:, 0], contour2d[:, 1], c='red', s=10)
+    ax2d.set_title("2D Concave Hull (YZ Projection)")
+    ax2d.set_xlabel("Y")
+    ax2d.set_ylabel("Z")
+    ax2d.legend()
+    ax2d.axis("equal")
 
-    ax.set_title("3D Point Cloud & Alpha-shape Contour")
-    ax.set_xlabel("X")
-    ax.set_ylabel("Y")
-    ax.set_zlabel("Z")
-    plt.axis("equal")  # Ensure equal axis scaling
     plt.tight_layout()
-    ax.legend()
     plt.show()
-    return
 
 
 if __name__ == "__main__":
@@ -130,10 +151,8 @@ if __name__ == "__main__":
 
     # Build a KDTree to find the closest original 3D points corresponding to the 2D contour
     tree = KDTree(points_2d)
-    _, indices_3d = tree.query(contour_2d)
 
-    # Retrieve the full 3D coordinates (X, Y, Z) of the contour
-    contour_3d = points_reduced[indices_3d]
+    area = compute_area(contour2d=contour_2d)
+    print(f"Area enclosed by the hull : {area:.3f} m²")
 
-    # Plot the 3D contour
-    display(pts=points_displayed, contour=contour_3d, vox_size1=v_size_1, vox_size2=v_size_2)
+    display(pts=points_displayed, contour2d=contour_2d)
