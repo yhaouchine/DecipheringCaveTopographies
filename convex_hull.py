@@ -73,8 +73,6 @@ if __name__ == "__main__":
     reduced_point_cloud = point_cloud.voxel_down_sample(voxel_size=v_size_1)
     points_reduced = np.asarray(reduced_point_cloud.points)
 
-    #v_size_2 = 0.1
-    #displayed_point_cloud = point_cloud.voxel_down_sample(voxel_size=v_size_2)
     points_displayed = np.asarray(point_cloud.points)
 
     # Verify the number of points
