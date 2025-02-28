@@ -9,11 +9,12 @@ import sys
 import open3d as o3d
 import numpy as np
 import matplotlib.pyplot as plt
-import warnings
 from matplotlib.patches import Polygon
 from open3d.cpu.pybind.geometry import PointCloud, Geometry, AxisAlignedBoundingBox
 from pathlib import Path
 from tkinter import simpledialog, messagebox, Tk
+from sklearn.decomposition import PCA
+from typing import Tuple
 
 background_color = {
     "white": [1.0, 1.0, 1.0],
@@ -116,11 +117,6 @@ def extract_cross_section(pc: PointCloud, position: np.ndarray, e: float | int) 
     @return: The cross-section point cloud
     """
 
-    warnings.simplefilter("default", DeprecationWarning)
-    warnings.warn(
-        "To make a cross-section with a polygonal shape, please use the default manipulation tools of Open3D",
-        DeprecationWarning
-    )
     points = np.asarray(pc.points)
     mask = (points[:, 0] > position - e / 2) & (points[:, 0] < position + e / 2)
     cut_points = points[mask]
@@ -157,45 +153,97 @@ def compute_area(contour2d: np.ndarray) -> float:
     return contour_area
 
 
-def display(pts: np.ndarray, contour2d: np.ndarray, contour3d: np.ndarray = None) -> None:
+def display(pts: np.ndarray, contour2d: np.ndarray, pts_2d: np.ndarray, pca_axes: np.ndarray,
+            contour3d: np.ndarray = None) -> None:
     fig = plt.figure(figsize=(8, 8) if contour3d is None else (16, 8))
 
+    # Affichage 3D si contour3d est fourni
     if contour3d is not None:
         ax3d = fig.add_subplot(121, projection='3d')
         ax3d.scatter(pts[:, 0], pts[:, 1], pts[:, 2], c='blue', s=1, label="Point cloud")
-        ax3d.plot(contour3d[:, 0], contour3d[:, 1], contour3d[:, 2], 'r--', linewidth=2.0, label="Convex hull")
-        ax3d.set_title("3D Point Cloud & Contour")
+        ax3d.plot(contour3d[:, 0], contour3d[:, 1], contour3d[:, 2], 'r--', linewidth=2.0, label="Concave hull (3D)")
+        ax3d.set_title("3D Point Cloud & Projected Contour")
         ax3d.set_xlabel("X")
         ax3d.set_ylabel("Y")
         ax3d.set_zlabel("Z")
-        ax3d.legend()
         ax3d.axis("equal")
+        ax3d.legend()
+        ax3d.set_box_aspect([1, 1, 1])  # Échelle des axes égale
         ax2d = fig.add_subplot(122)
     else:
         ax2d = fig.add_subplot(111)
 
+    # Calcul de l'aire
     area = compute_area(contour2d)
 
-    # Fill the contour with a transparent color
-    polygon = Polygon(contour2d, closed=True, facecolor='red', alpha=0.1, edgecolor='r', linewidth=2.0)
+    # Définir les noms des axes selon la PCA
+    pca_x_label = "PCA Axis 1"
+    pca_y_label = "PCA Axis 2"
+
+    # Dessin du contour concave dans le plan PCA
+    polygon = Polygon(contour2d.tolist(), closed=True, facecolor='red', alpha=0.2, edgecolor='r', linewidth=2.0)
     ax2d.add_patch(polygon)
 
-    ax2d.plot(contour2d[:, 0], contour2d[:, 1], 'r--', linewidth=2.0, label="Concave hull (YZ projection)")
-    ax2d.scatter(pts[:, 1], pts[:, 2], c='black', s=1)
+    ax2d.plot(contour2d[:, 0], contour2d[:, 1], 'r--', linewidth=2.0, label="Concave hull (PCA Plane)")
+    ax2d.scatter(pts_2d[:, 0], pts_2d[:, 1], c='black', s=1, label="Projected points")
 
-    text_x, _ = np.mean(contour2d, axis=0)
-    _, text_y = np.max(contour2d, axis=0)
-    ax2d.text(text_x, text_y, f"Area = {area:.2f} m²", fontsize=14, color='black', ha='center', va='top',
+    # Position du texte centrée sur l'aire
+    centroid = np.mean(contour2d, axis=0)
+    ax2d.text(centroid[0], centroid[1], f"Area = {area:.2f} m²",
+              fontsize=14, color='black', ha='center', va='center',
               bbox=dict(facecolor='white', alpha=0.6))
 
-    ax2d.set_title("2D Concave Hull (YZ Projection)")
-    ax2d.set_xlabel("Y")
-    ax2d.set_ylabel("Z")
+    # Mise à jour des titres et labels
+    ax2d.set_title("Concave Hull in PCA Plane")
+    ax2d.set_xlabel(pca_x_label)
+    ax2d.set_ylabel(pca_y_label)
     ax2d.legend()
     ax2d.axis("equal")
-
     plt.tight_layout()
     plt.show()
+
+
+def project_points_pca(points: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Project points using principal component analysis in the case where the cross-section is not aligned with any XYZ axis
+
+    @param points:
+    @return:
+    """
+
+    mean = np.mean(points, axis=0)
+    centered_points = points - mean
+
+    pca = PCA(n_components=3)
+    pca.fit(centered_points)
+
+    plane_normal = pca.components_[2]
+    projected_points = centered_points @ pca.components_[:2].T
+
+    return projected_points, pca.components_, mean
+
+
+def correct_pca_orientation(pca_axes, points_2d):
+    """
+    Corrige l'orientation des axes de la PCA si l'un d'eux est inversé par rapport au repère global.
+
+    :param pca_axes: Matrice 3x3 des axes principaux issus de la PCA
+    :param points_2d: Nuage de points projeté dans le plan PCA
+    :return: points_2d corrigé
+    """
+    reference_axes = np.array([[1, 0, 0],  # X global
+                               [0, 1, 0],  # Y global
+                               [0, 0, 1]])  # Z global
+
+    # Vérification de chaque axe
+    for i in range(3):
+        dot_product = np.dot(pca_axes[:, i], reference_axes[i])  # Produit scalaire avec l'axe global correspondant
+        if dot_product < 0:
+            pca_axes[:, i] *= -1  # Inversion de l'axe
+            if i < 2:  # On ne touche que les axes projetés (X et Y de la PCA)
+                points_2d[:, i] *= -1
+
+    return points_2d
 
 
 if __name__ == "__main__":

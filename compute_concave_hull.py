@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.spatial import KDTree
-from process_cloud import import_cloud, display, compute_area
+from process_cloud import import_cloud, display, compute_area, project_points_pca
 from concave_hull import concave_hull
 
 
