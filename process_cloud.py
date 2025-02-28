@@ -8,12 +8,13 @@ __date__ = "novembre 2024"
 import sys
 import open3d as o3d
 import numpy as np
-from open3d.cpu.pybind.geometry import PointCloud, Geometry  # ,AxisAlignedBoundingBox
+import matplotlib.pyplot as plt
+from matplotlib.patches import Polygon
+from open3d.cpu.pybind.geometry import PointCloud, Geometry, AxisAlignedBoundingBox
 from pathlib import Path
-# import tkinter as tk
 from tkinter import simpledialog, messagebox, Tk
-
-# import warnings
+from sklearn.decomposition import PCA
+from typing import Tuple
 
 background_color = {
     "white": [1.0, 1.0, 1.0],
@@ -106,7 +107,7 @@ def o3d_visualizer(window_name: str, geom1: Geometry = None, geom2: Geometry = N
     return picked_points
 
 
-'''def extract_cross_section(pc: PointCloud, position: np.ndarray, e: float | int) -> PointCloud:
+def extract_cross_section(pc: PointCloud, position: np.ndarray, e: float | int) -> PointCloud:
     """
     Function to extract a cross-section from a point cloud
 
@@ -116,16 +117,15 @@ def o3d_visualizer(window_name: str, geom1: Geometry = None, geom2: Geometry = N
     @return: The cross-section point cloud
     """
 
-    warnings.simplefilter("default", DeprecationWarning)
-    warnings.warn("This function is obsolete, please use the default manipulation tools of Open3D", DeprecationWarning)
     points = np.asarray(pc.points)
     mask = (points[:, 0] > position - e / 2) & (points[:, 0] < position + e / 2)
     cut_points = points[mask]
     cut_pc = o3d.geometry.PointCloud()
     cut_pc.points = o3d.utility.Vector3dVector(cut_points)
-    return cut_pc'''
+    return cut_pc
 
-'''def create_bounding_box(center_point: np.ndarray, size: float | int) -> AxisAlignedBoundingBox:
+
+def create_bounding_box(center_point: np.ndarray, size: float | int) -> AxisAlignedBoundingBox:
     """
     Function to create a bounding box
     
@@ -133,10 +133,118 @@ def o3d_visualizer(window_name: str, geom1: Geometry = None, geom2: Geometry = N
     @param size: Range of the bounding box centered on the center point
     @return: Bounding box object
     """
-    
+
     min_bound = center_point - size / 2
     max_bound = center_point + size / 2
-    return o3d.geometry.AxisAlignedBoundingBox(min_bound, max_bound)'''
+    return o3d.geometry.AxisAlignedBoundingBox(min_bound, max_bound)
+
+
+def compute_area(contour2d: np.ndarray) -> float:
+    """
+    Compute the area enclosed by a 2D contour using the Shoelace formula.
+
+    @param contour2d:
+    @return:
+    """
+
+    x, y = contour2d[:, 0], contour2d[:, 1]
+    contour_area = 0.5 * np.abs(np.sum(x[:-1] * y[1:] - x[1:] * y[:-1]) + (x[-1] * y[0] - x[0] * y[-1]))
+
+    return contour_area
+
+
+def display(pts: np.ndarray, contour2d: np.ndarray, pts_2d: np.ndarray, pca_axes: np.ndarray,
+            contour3d: np.ndarray = None) -> None:
+    fig = plt.figure(figsize=(8, 8) if contour3d is None else (16, 8))
+
+    # Affichage 3D si contour3d est fourni
+    if contour3d is not None:
+        ax3d = fig.add_subplot(121, projection='3d')
+        ax3d.scatter(pts[:, 0], pts[:, 1], pts[:, 2], c='blue', s=1, label="Point cloud")
+        ax3d.plot(contour3d[:, 0], contour3d[:, 1], contour3d[:, 2], 'r--', linewidth=2.0, label="Concave hull (3D)")
+        ax3d.set_title("3D Point Cloud & Projected Contour")
+        ax3d.set_xlabel("X")
+        ax3d.set_ylabel("Y")
+        ax3d.set_zlabel("Z")
+        ax3d.axis("equal")
+        ax3d.legend()
+        ax3d.set_box_aspect([1, 1, 1])  # Échelle des axes égale
+        ax2d = fig.add_subplot(122)
+    else:
+        ax2d = fig.add_subplot(111)
+
+    # Calcul de l'aire
+    area = compute_area(contour2d)
+
+    # Définir les noms des axes selon la PCA
+    pca_x_label = "PCA Axis 1"
+    pca_y_label = "PCA Axis 2"
+
+    # Dessin du contour concave dans le plan PCA
+    polygon = Polygon(contour2d.tolist(), closed=True, facecolor='red', alpha=0.2, edgecolor='r', linewidth=2.0)
+    ax2d.add_patch(polygon)
+
+    ax2d.plot(contour2d[:, 0], contour2d[:, 1], 'r--', linewidth=2.0, label="Concave hull (PCA Plane)")
+    ax2d.scatter(pts_2d[:, 0], pts_2d[:, 1], c='black', s=1, label="Projected points")
+
+    # Position du texte centrée sur l'aire
+    centroid = np.mean(contour2d, axis=0)
+    ax2d.text(centroid[0], centroid[1], f"Area = {area:.2f} m²",
+              fontsize=14, color='black', ha='center', va='center',
+              bbox=dict(facecolor='white', alpha=0.6))
+
+    # Mise à jour des titres et labels
+    ax2d.set_title("Concave Hull in PCA Plane")
+    ax2d.set_xlabel(pca_x_label)
+    ax2d.set_ylabel(pca_y_label)
+    ax2d.legend()
+    ax2d.axis("equal")
+    plt.tight_layout()
+    plt.show()
+
+
+def project_points_pca(points: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Project points using principal component analysis in the case where the cross-section is not aligned with any XYZ axis
+
+    @param points:
+    @return:
+    """
+
+    mean = np.mean(points, axis=0)
+    centered_points = points - mean
+
+    pca = PCA(n_components=3)
+    pca.fit(centered_points)
+
+    plane_normal = pca.components_[2]
+    projected_points = centered_points @ pca.components_[:2].T
+
+    return projected_points, pca.components_, mean
+
+
+def correct_pca_orientation(pca_axes, points_2d):
+    """
+    Corrige l'orientation des axes de la PCA si l'un d'eux est inversé par rapport au repère global.
+
+    :param pca_axes: Matrice 3x3 des axes principaux issus de la PCA
+    :param points_2d: Nuage de points projeté dans le plan PCA
+    :return: points_2d corrigé
+    """
+    reference_axes = np.array([[1, 0, 0],  # X global
+                               [0, 1, 0],  # Y global
+                               [0, 0, 1]])  # Z global
+
+    # Vérification de chaque axe
+    for i in range(3):
+        dot_product = np.dot(pca_axes[:, i], reference_axes[i])  # Produit scalaire avec l'axe global correspondant
+        if dot_product < 0:
+            pca_axes[:, i] *= -1  # Inversion de l'axe
+            if i < 2:  # On ne touche que les axes projetés (X et Y de la PCA)
+                points_2d[:, i] *= -1
+
+    return points_2d
+
 
 if __name__ == "__main__":
 
@@ -157,28 +265,15 @@ if __name__ == "__main__":
     selected_points_coordinates = np.asarray(selected_points.points)
 
     # Position the cut on the point
-    # cut_position = selected_points_coordinates[0][0]
-    # thickness = simpledialog.askfloat("Thickness of the cross-section", "Cross-section thickness: ")
-    # cross_section_pc = extract_cross_section(point_cloud, cut_position, thickness)
+    cut_position = selected_points_coordinates[0][0]
+    thickness = simpledialog.askfloat("Tolerance of the cross-section", "Cross-section tolerance: ")
+    cross_section_pc = extract_cross_section(point_cloud, cut_position, thickness)
 
     # Selecting point in the cross-section from which the Bounding Box is created
-    # center_index = o3d_visualizer(window_name=point_cloud_name + ": Cross-section", geom1=cross_section_pc)
-    # if not center_index:
-    #    print("No point selected in cross-section. Exiting.")
-    #    sys.exit()
-
-    # bbox_center = np.asarray(cross_section_pc.points)[center_index[0]]
-    # bbox_size = 2
-    # bbox = create_bounding_box(bbox_center, bbox_size)
-    # bbox.color = [1.0, 0.0, 0.0]
-
-    # visualizer2 = o3d_visualizer(window_name="Cross-section and bounding box", geom1=cross_section_pc, geom2=bbox)
-
-    # Filter points outside the bounding box
-    # filtered_pc = cross_section_pc.crop(bbox)
-
-    # Visualize the filtered point cloud
-    # visualizer3 = o3d_visualizer(window_name="Points within the bounding box", geom1=filtered_pc)
+    center_index = o3d_visualizer(window_name=point_cloud_name + ": Cross-section", geom1=cross_section_pc)
+    if not center_index:
+        print("No point selected in cross-section. Exiting.")
+        sys.exit()
 
 # TODO:
 #   Ajouter une valeur de tolérance pour l'épaisseur de la courbe, avec une valeur par défaut et une demande à l'utilisateur.
