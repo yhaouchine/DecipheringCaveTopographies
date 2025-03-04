@@ -153,95 +153,112 @@ def compute_area(contour2d: np.ndarray) -> float:
     return contour_area
 
 
-def display(pts: np.ndarray, contour2d: np.ndarray, pts_2d: np.ndarray, pca_axes: np.ndarray,
+def display(pts: np.ndarray, contour2d: np.ndarray, projected_pts: np.ndarray, pca_axes: np.ndarray, azimuth: float,
             contour3d: np.ndarray = None) -> None:
     fig = plt.figure(figsize=(8, 8) if contour3d is None else (16, 8))
 
-    # Affichage 3D si contour3d est fourni
+    # Adding a 3D plot if asked
     if contour3d is not None:
         ax3d = fig.add_subplot(121, projection='3d')
         ax3d.scatter(pts[:, 0], pts[:, 1], pts[:, 2], c='blue', s=1, label="Point cloud")
-        ax3d.plot(contour3d[:, 0], contour3d[:, 1], contour3d[:, 2], 'r--', linewidth=2.0, label="Concave hull (3D)")
-        ax3d.set_title("3D Point Cloud & Projected Contour")
+        ax3d.plot(contour3d[:, 0], contour3d[:, 1], contour3d[:, 2], 'r--', linewidth=2.0, label="Contour (3D)")
+        ax3d.set_title("3D Point Cloud & Contour")
         ax3d.set_xlabel("X")
         ax3d.set_ylabel("Y")
         ax3d.set_zlabel("Z")
         ax3d.axis("equal")
         ax3d.legend()
-        ax3d.set_box_aspect([1, 1, 1])  # Échelle des axes égale
+        ax3d.set_box_aspect([1, 1, 1])
         ax2d = fig.add_subplot(122)
     else:
         ax2d = fig.add_subplot(111)
 
-    # Calcul de l'aire
+    # Calculate the area enclosed in the contour
     area = compute_area(contour2d)
 
-    # Définir les noms des axes selon la PCA
+    # PCA axes names
     pca_x_label = "PCA Axis 1"
     pca_y_label = "PCA Axis 2"
 
-    # Dessin du contour concave dans le plan PCA
+    # Fill the contour in the PCA plan
     polygon = Polygon(contour2d.tolist(), closed=True, facecolor='red', alpha=0.2, edgecolor='r', linewidth=2.0)
     ax2d.add_patch(polygon)
 
-    ax2d.plot(contour2d[:, 0], contour2d[:, 1], 'r--', linewidth=2.0, label="Concave hull (PCA Plane)")
-    ax2d.scatter(pts_2d[:, 0], pts_2d[:, 1], c='black', s=1, label="Projected points")
+    ax2d.plot(contour2d[:, 0], contour2d[:, 1], 'r--', linewidth=2.0, label="Contour (In the PCA Plane)")
+    ax2d.scatter(projected_pts[:, 0], projected_pts[:, 1], c='black', s=1, label="Projected points")
 
-    # Position du texte centrée sur l'aire
-    centroid = np.mean(contour2d, axis=0)
-    ax2d.text(centroid[0], centroid[1], f"Area = {area:.2f} m²",
-              fontsize=14, color='black', ha='center', va='center',
+    # Position of the area value text
+    text_x, _ = np.mean(contour2d, axis=0)
+    _, text_y = np.max(contour2d, axis=0)
+    ax2d.text(text_x, text_y, f"Area = {area:.2f} m²", fontsize=14, color='black', ha='center', va='top',
               bbox=dict(facecolor='white', alpha=0.6))
 
-    # Mise à jour des titres et labels
-    ax2d.set_title("Concave Hull in PCA Plane")
-    ax2d.set_xlabel(pca_x_label)
-    ax2d.set_ylabel(pca_y_label)
+    ax2d.set_title("Contour in PCA Plane")
+    ax2d.set_xlabel(f"Azimuth {azimuth:.1f}°")
+    ax2d.set_ylabel("Perpendicular Axis")
     ax2d.legend()
     ax2d.axis("equal")
     plt.tight_layout()
     plt.show()
 
 
-def project_points_pca(points: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def pca_projection(points: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, float]:
     """
-    Project points using principal component analysis in the case where the cross-section is not aligned with any XYZ axis
+    Projects a set of 3D points onto a 2D plane using Principal Component Analysis (PCA).
 
-    @param points:
-    @return:
+    This function is useful for analyzing cross-sections of 3D point clouds that are not aligned
+    with the standard XYZ axes. It determines the principal directions of the point cloud and
+    projects the points onto the first two principal components, effectively reducing the
+    dimensionality from 3D to 2D.
+
+    :param points: A NumPy array of shape (n, 3), representing `n` points in 3D space.
+
+    :return: A tuple containing:
+        - `projected_points` (np.ndarray of shape (n, 2)): The 2D coordinates of the projected points
+          onto the PCA plane.
+        - `pca_axes` (np.ndarray of shape (3, 3)): The three principal component vectors (each row is an eigenvector).
+          The first two define the projection plane, and the third is the normal to this plane.
+        - `mean` (np.ndarray of shape (3,)): The mean of the original points, used for centering before PCA.
     """
 
+    # Compute the mean and center the points
     mean = np.mean(points, axis=0)
     centered_points = points - mean
 
+    # Perform PCA to determine the principal directions
     pca = PCA(n_components=3)
     pca.fit(centered_points)
 
+    # The normal to the best-fitting plane (third principal component)
     plane_normal = pca.components_[2]
-    projected_points = centered_points @ pca.components_[:2].T
+    pca_axes = pca.components_
 
-    return projected_points, pca.components_, mean
+    # Compute the azimuth of the principal axis
+    primary_axis = pca_axes[0]
+    azimuth = np.degrees(np.arctan2(primary_axis[0], primary_axis[1]))
+
+    # Project the points onto the first two principal components
+    projected_points = centered_points @ pca_axes[:2].T
+
+    return projected_points, pca.components_, mean, azimuth
 
 
-def correct_pca_orientation(pca_axes, points_2d):
+def pca_correction(pca_axes, points_2d):
     """
-    Corrige l'orientation des axes de la PCA si l'un d'eux est inversé par rapport au repère global.
+    Corrects the orientation of the PCA axes so that the projected 2D points follow a consistent orientation.
 
-    :param pca_axes: Matrice 3x3 des axes principaux issus de la PCA
-    :param points_2d: Nuage de points projeté dans le plan PCA
-    :return: points_2d corrigé
+    :param pca_axes: 3x3 matrix of the principal PCA axes
+    :param points_2d: 2D point cloud projected in the PCA plane
+    :return: corrected points_2d
     """
-    reference_axes = np.array([[1, 0, 0],  # X global
-                               [0, 1, 0],  # Y global
-                               [0, 0, 1]])  # Z global
+    reference_axes = np.eye(3)  # Matrice identité pour représenter les axes globaux (X, Y, Z)
 
-    # Vérification de chaque axe
-    for i in range(3):
-        dot_product = np.dot(pca_axes[:, i], reference_axes[i])  # Produit scalaire avec l'axe global correspondant
-        if dot_product < 0:
-            pca_axes[:, i] *= -1  # Inversion de l'axe
-            if i < 2:  # On ne touche que les axes projetés (X et Y de la PCA)
-                points_2d[:, i] *= -1
+    # Vérification et correction de l'orientation des axes PCA
+    for i in range(2):  # Seulement les axes projetés (PCA X et PCA Y)
+        dot_product = np.dot(pca_axes[:, i], reference_axes[i])  # Produit scalaire avec l'axe global
+        if dot_product < 0:  # Si l'axe est inversé
+            pca_axes[:, i] *= -1  # Inversion de l'axe PCA
+            points_2d[:, i] *= -1  # Inversion des coordonnées projetées
 
     return points_2d
 
