@@ -1,7 +1,7 @@
 import numpy as np
 import alphashape
 import time
-from process_cloud import import_cloud, display, pca_projection, pca_correction
+from process_cloud import import_cloud, display, pca_projection
 from typing import Tuple
 
 
@@ -42,12 +42,7 @@ if __name__ == "__main__":
     if points_reduced.shape[0] < 3:
         raise ValueError("Not enough points to create a contour.")
 
-    points_2d, pca_axes, mean, azimuth = pca_projection(points=points_reduced)
-
-    print("PCA Axes:\n", pca_axes)
-    print("Mean position:\n", mean)
-
-    points_2d = pca_correction(pca_axes=pca_axes, points_2d=points_2d)
+    points_2d, pca_axes, mean = pca_projection(points_3d=points_reduced, diagnosis=True, display=True)
 
     alpha_shape, duration = calculate_alpha_shape(alpha=3.5, pts=points_2d)
 

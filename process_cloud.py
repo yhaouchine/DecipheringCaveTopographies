@@ -153,7 +153,7 @@ def compute_area(contour2d: np.ndarray) -> float:
     return contour_area
 
 
-def display(pts: np.ndarray, contour2d: np.ndarray, projected_pts: np.ndarray, pca_axes: np.ndarray, azimuth: float,
+def display(pts: np.ndarray, contour2d: np.ndarray, projected_pts: np.ndarray, pca_axes: np.ndarray,
             contour3d: np.ndarray = None) -> None:
     fig = plt.figure(figsize=(8, 8) if contour3d is None else (16, 8))
 
@@ -194,7 +194,7 @@ def display(pts: np.ndarray, contour2d: np.ndarray, projected_pts: np.ndarray, p
               bbox=dict(facecolor='white', alpha=0.6))
 
     ax2d.set_title("Contour in PCA Plane")
-    ax2d.set_xlabel(f"Azimuth {azimuth:.1f}°")
+    ax2d.set_xlabel("PCA1")
     ax2d.set_ylabel("Perpendicular Axis")
     ax2d.legend()
     ax2d.axis("equal")
@@ -202,65 +202,107 @@ def display(pts: np.ndarray, contour2d: np.ndarray, projected_pts: np.ndarray, p
     plt.show()
 
 
-def pca_projection(points: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+def pca_projection(points_3d: np.ndarray, diagnosis: bool = False, display: bool = False) -> Tuple[
+    np.ndarray, np.ndarray, np.ndarray]:
     """
-    Projects a set of 3D points onto a 2D plane using Principal Component Analysis (PCA).
+    Projects a set of 3D points onto a 2D plane using PCA and rotates the projection so that the
+    first principal component (PC1) is aligned horizontally (i.e., parallel to the global X-axis).
 
-    This function is useful for analyzing cross-sections of 3D point clouds that are not aligned
-    with the standard XYZ axes. It determines the principal directions of the point cloud and
-    projects the points onto the first two principal components, effectively reducing the
-    dimensionality from 3D to 2D.
+    This function prints the orientation of the PCA axes and the angle of PC1 before and after rotation.
 
-    :param points: A NumPy array of shape (n, 3), representing `n` points in 3D space.
-
+    :param points_3d: A NumPy array of shape (n, 3), representing n points in 3D space.
     :return: A tuple containing:
-        - `projected_points` (np.ndarray of shape (n, 2)): The 2D coordinates of the projected points
-          onto the PCA plane.
-        - `pca_axes` (np.ndarray of shape (3, 3)): The three principal component vectors (each row is an eigenvector).
-          The first two define the projection plane, and the third is the normal to this plane.
-        - `mean` (np.ndarray of shape (3,)): The mean of the original points, used for centering before PCA.
+        - projected_points_rotated (np.ndarray of shape (n, 2)): The rotated 2D coordinates.
+        - pca_axes (np.ndarray of shape (3, 3)): The principal component vectors from the PCA.
+        - mean (np.ndarray of shape (3,)): The mean of the original points.
     """
+    # 1. Center the points
+    mean = np.mean(points_3d, axis=0)
+    centered_points = points_3d - mean
 
-    # Compute the mean and center the points
-    mean = np.mean(points, axis=0)
-    centered_points = points - mean
-
-    # Perform PCA to determine the principal directions
+    # 2. Perform PCA on centered points
     pca = PCA(n_components=3)
     pca.fit(centered_points)
+    pca_axes = pca.components_  # Rows: PC1, PC2, PC3
 
-    # The normal to the best-fitting plane (third principal component)
-    plane_normal = pca.components_[2]
-    pca_axes = pca.components_
+    if diagnosis:
+        eigenvalues = pca.explained_variance_
+        print("=== PCA DIAGNOSIS ===")
+        print("Eigenvalues:")
+        for i, val in enumerate(eigenvalues):
+            print(f" PC{i + 1}: {val:.5f}")
 
-    # Compute the azimuth of the principal axis
-    primary_axis = pca_axes[0]
-    azimuth = np.degrees(np.arctan2(primary_axis[0], primary_axis[1]))
+        # Extraction des axes PC1 et PC2 en 2D
+        PC1_2d = pca_axes[0][:2]
+        PC2_2d = pca_axes[1][:2]
 
-    # Project the points onto the first two principal components
-    projected_points = centered_points @ pca_axes[:2].T
+        # Normaliser ces vecteurs
+        PC1_2d_norm = PC1_2d / np.linalg.norm(PC1_2d)
+        PC2_2d_norm = PC2_2d / np.linalg.norm(PC2_2d)
 
-    return projected_points, pca.components_, mean, azimuth
+        # Calculer leur produit scalaire (doit être proche de 0 si les axes sont perpendiculaires)
+        dot = np.dot(PC1_2d_norm, PC2_2d_norm)
+        print(f"PC1_2d normalized: {PC1_2d_norm}")
+        print(f"PC2_2d normalized: {PC2_2d_norm}")
+        print(f"Scalar product = {dot:.5f}")
 
+    # Projection 2D (sans rotation corrective)
+    points_2d = centered_points @ pca_axes[:2].T  # (n,2)
 
-def pca_correction(pca_axes, points_2d):
-    """
-    Corrects the orientation of the PCA axes so that the projected 2D points follow a consistent orientation.
+    if display:
+        # Affichage 3D et 2D pour comparer
+        fig = plt.figure(figsize=(14, 6))
 
-    :param pca_axes: 3x3 matrix of the principal PCA axes
-    :param points_2d: 2D point cloud projected in the PCA plane
-    :return: corrected points_2d
-    """
-    reference_axes = np.eye(3)  # Matrice identité pour représenter les axes globaux (X, Y, Z)
+        # Graphique 3D
+        ax3d = fig.add_subplot(1, 2, 1, projection='3d')
+        ax3d.scatter(points_3d[:, 0], points_3d[:, 1], points_3d[:, 2],
+                     c='black', s=5, alpha=0.6, label="Point Cloud")
+        ax3d.set_title("Nuage 3D")
+        ax3d.set_xlabel("X")
+        ax3d.set_ylabel("Y")
+        ax3d.set_zlabel("Z")
+        ax3d.legend()
 
-    # Vérification et correction de l'orientation des axes PCA
-    for i in range(2):  # Seulement les axes projetés (PCA X et PCA Y)
-        dot_product = np.dot(pca_axes[:, i], reference_axes[i])  # Produit scalaire avec l'axe global
-        if dot_product < 0:  # Si l'axe est inversé
-            pca_axes[:, i] *= -1  # Inversion de l'axe PCA
-            points_2d[:, i] *= -1  # Inversion des coordonnées projetées
+        # Ajouter les flèches des axes PCA dans le graphique 3D
+        centroid = mean  # Origine des flèches : le barycentre
+        # Calculer une échelle uniforme pour les flèches
+        scale = 0.1 * np.linalg.norm(np.max(points_3d, axis=0) - np.min(points_3d, axis=0))
+        colors = ['red', 'green', 'blue']
+        labels = ['PC1', 'PC2', 'PC3']
+        for i in range(3):
+            ax3d.quiver(centroid[0], centroid[1], centroid[2],
+                        pca_axes[i, 0], pca_axes[i, 1], pca_axes[i, 2],
+                        color=colors[i], length=scale, normalize=True, label=labels[i])
+        # Afin d'éviter des doublons dans la légende
+        handles, labels = ax3d.get_legend_handles_labels()
+        unique_labels = dict(zip(labels, handles))
+        ax3d.legend(unique_labels.values(), unique_labels.keys())
 
-    return points_2d
+        # Graphique 2D : Projection sur PC1-PC2
+        ax2d = fig.add_subplot(1, 2, 2)
+        ax2d.scatter(points_2d[:, 0], points_2d[:, 1], c='black', s=5, alpha=0.6, label="Projection (PC1-PC2)")
+        ax2d.set_title("Projection PCA (PC1 vs PC2)")
+        ax2d.set_xlabel("PC1")
+        ax2d.set_ylabel("PC2")
+        ax2d.axis("equal")
+
+        # Afficher les flèches des axes PC1 et PC2 dans le plan 2D
+        origin = np.array([0, 0])
+        # Choisir une échelle adaptée pour l'affichage (20% de l'étendue des points)
+        scale_2d = 0.2 * (np.max(points_2d, axis=0) - np.min(points_2d, axis=0))
+        ax2d.arrow(origin[0], origin[1], PC1_2d_norm[0] * scale_2d[0], PC1_2d_norm[1] * scale_2d[1],
+                   color='red', width=0.2, head_width=2, length_includes_head=True, label="PC1")
+        ax2d.arrow(origin[0], origin[1], PC2_2d_norm[0] * scale_2d[0], PC2_2d_norm[1] * scale_2d[1],
+                   color='green', width=0.2, head_width=2, length_includes_head=True, label="PC2")
+        # Légende sans doublons
+        handles, labels = ax2d.get_legend_handles_labels()
+        unique_labels = dict(zip(labels, handles))
+        ax2d.legend(unique_labels.values(), unique_labels.keys())
+
+        plt.tight_layout()
+        plt.show()
+
+    return points_2d, pca_axes, mean
 
 
 if __name__ == "__main__":
@@ -293,7 +335,6 @@ if __name__ == "__main__":
         sys.exit()
 
 # TODO:
-#   Ajouter une valeur de tolérance pour l'épaisseur de la courbe, avec une valeur par défaut et une demande à l'utilisateur.
 #   Possibilité de faire plusieurs coupes avec une distance entre les coupes constantes, ou des coupes à placer manuellement.
 #   Projeter en 2D puis faire la réduction du nuage avec les voxels ?
 #   Ne pas re projeter en 3D car ce n'est pas utile.
