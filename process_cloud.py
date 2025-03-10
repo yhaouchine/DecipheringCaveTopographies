@@ -202,8 +202,8 @@ def display(pts: np.ndarray, contour2d: np.ndarray, projected_pts: np.ndarray, p
     plt.show()
 
 
-def pca_projection(points_3d: np.ndarray, diagnosis: bool = False, display: bool = False) -> Tuple[
-    np.ndarray, np.ndarray, np.ndarray]:
+def pca_projection(points_3d: np.ndarray, diagnosis: bool = False, display: bool = False) \
+        -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Projects a set of 3D points onto a 2D plane using PCA and rotates the projection so that the
     first principal component (PC1) is aligned horizontally (i.e., parallel to the global X-axis).
@@ -211,11 +211,15 @@ def pca_projection(points_3d: np.ndarray, diagnosis: bool = False, display: bool
     This function prints the orientation of the PCA axes and the angle of PC1 before and after rotation.
 
     :param points_3d: A NumPy array of shape (n, 3), representing n points in 3D space.
+    :param display: Choose whether to display the PCA projection (useful for diagnosis).
+    :param diagnosis: Choose whether to perform the diagnosis.
+
     :return: A tuple containing:
         - projected_points_rotated (np.ndarray of shape (n, 2)): The rotated 2D coordinates.
         - pca_axes (np.ndarray of shape (3, 3)): The principal component vectors from the PCA.
         - mean (np.ndarray of shape (3,)): The mean of the original points.
     """
+
     # 1. Center the points
     mean = np.mean(points_3d, axis=0)
     centered_points = points_3d - mean
@@ -225,6 +229,9 @@ def pca_projection(points_3d: np.ndarray, diagnosis: bool = False, display: bool
     pca.fit(centered_points)
     pca_axes = pca.components_  # Rows: PC1, PC2, PC3
 
+    # Project in 2D
+    points_2d = pca.transform(centered_points)[:, :2]  # (n,2)
+
     if diagnosis:
         eigenvalues = pca.explained_variance_
         print("=== PCA DIAGNOSIS ===")
@@ -232,72 +239,69 @@ def pca_projection(points_3d: np.ndarray, diagnosis: bool = False, display: bool
         for i, val in enumerate(eigenvalues):
             print(f" PC{i + 1}: {val:.5f}")
 
-        # Extraction des axes PC1 et PC2 en 2D
+        # Extract PC1 and PC2 axis in 2D
         PC1_2d = pca_axes[0][:2]
         PC2_2d = pca_axes[1][:2]
 
-        # Normaliser ces vecteurs
+        # Normalize the vectors
         PC1_2d_norm = PC1_2d / np.linalg.norm(PC1_2d)
         PC2_2d_norm = PC2_2d / np.linalg.norm(PC2_2d)
 
-        # Calculer leur produit scalaire (doit être proche de 0 si les axes sont perpendiculaires)
+        # compute the scalar product
         dot = np.dot(PC1_2d_norm, PC2_2d_norm)
         print(f"PC1_2d normalized: {PC1_2d_norm}")
         print(f"PC2_2d normalized: {PC2_2d_norm}")
         print(f"Scalar product = {dot:.5f}")
 
-    # Projection 2D (sans rotation corrective)
-    points_2d = centered_points @ pca_axes[:2].T  # (n,2)
-
     if display:
-        # Affichage 3D et 2D pour comparer
         fig = plt.figure(figsize=(14, 6))
 
-        # Graphique 3D
+        # 3D view
         ax3d = fig.add_subplot(1, 2, 1, projection='3d')
-        ax3d.scatter(points_3d[:, 0], points_3d[:, 1], points_3d[:, 2],
-                     c='black', s=5, alpha=0.6, label="Point Cloud")
+        ax3d.scatter(
+            points_3d[:, 0], points_3d[:, 1], points_3d[:, 2],
+            c='black', s=1, alpha=0.6, label="Point Cloud"
+                     )
         ax3d.set_title("Nuage 3D")
         ax3d.set_xlabel("X")
         ax3d.set_ylabel("Y")
         ax3d.set_zlabel("Z")
         ax3d.legend()
 
-        # Ajouter les flèches des axes PCA dans le graphique 3D
-        centroid = mean  # Origine des flèches : le barycentre
-        # Calculer une échelle uniforme pour les flèches
+        # Adding arrows to représent the PCA axes orientation in 3D
         scale = 0.1 * np.linalg.norm(np.max(points_3d, axis=0) - np.min(points_3d, axis=0))
         colors = ['red', 'green', 'blue']
         labels = ['PC1', 'PC2', 'PC3']
         for i in range(3):
-            ax3d.quiver(centroid[0], centroid[1], centroid[2],
+            ax3d.quiver(mean[0], mean[1], mean[2],
                         pca_axes[i, 0], pca_axes[i, 1], pca_axes[i, 2],
                         color=colors[i], length=scale, normalize=True, label=labels[i])
-        # Afin d'éviter des doublons dans la légende
-        handles, labels = ax3d.get_legend_handles_labels()
-        unique_labels = dict(zip(labels, handles))
-        ax3d.legend(unique_labels.values(), unique_labels.keys())
 
-        # Graphique 2D : Projection sur PC1-PC2
+        ax3d.legend()
+
+        # 2D view: Projection on PC1-PC2 plan
         ax2d = fig.add_subplot(1, 2, 2)
-        ax2d.scatter(points_2d[:, 0], points_2d[:, 1], c='black', s=5, alpha=0.6, label="Projection (PC1-PC2)")
+        ax2d.scatter(points_2d[:, 0], points_2d[:, 1], c='black', s=1, alpha=0.6, label="Projection (PC1-PC2)")
         ax2d.set_title("Projection PCA (PC1 vs PC2)")
         ax2d.set_xlabel("PC1")
         ax2d.set_ylabel("PC2")
         ax2d.axis("equal")
 
-        # Afficher les flèches des axes PC1 et PC2 dans le plan 2D
-        origin = np.array([0, 0])
-        # Choisir une échelle adaptée pour l'affichage (20% de l'étendue des points)
-        scale_2d = 0.2 * (np.max(points_2d, axis=0) - np.min(points_2d, axis=0))
-        ax2d.arrow(origin[0], origin[1], PC1_2d_norm[0] * scale_2d[0], PC1_2d_norm[1] * scale_2d[1],
-                   color='red', width=0.2, head_width=2, length_includes_head=True, label="PC1")
-        ax2d.arrow(origin[0], origin[1], PC2_2d_norm[0] * scale_2d[0], PC2_2d_norm[1] * scale_2d[1],
-                   color='green', width=0.2, head_width=2, length_includes_head=True, label="PC2")
-        # Légende sans doublons
-        handles, labels = ax2d.get_legend_handles_labels()
-        unique_labels = dict(zip(labels, handles))
-        ax2d.legend(unique_labels.values(), unique_labels.keys())
+        # Create small 3D vectors along PC1 & PC2
+        pc1_3d = pca_axes[0] * 0.2  # shape (3,)
+        pc2_3d = pca_axes[1] * 0.2  # shape (3,)
+
+        # We transform them: transform expects shape (n,3)
+        pc1_2d = pca.transform([pc1_3d])  # shape (1,2)
+        pc2_2d = pca.transform([pc2_3d])  # shape (1,2)
+
+        # Now we can plot them as arrows from (0,0) in the 2D plane
+        # Let's scale them a bit more for visibility
+        arrow_scale_2d = 20
+        ax2d.arrow(0, 0, pc1_2d[0, 0] * arrow_scale_2d, pc1_2d[0, 1] * arrow_scale_2d,
+                   color='red', width=0.1, head_width=0.4, length_includes_head=True, label="PC1")
+        ax2d.arrow(0, 0, pc2_2d[0, 0] * arrow_scale_2d, pc2_2d[0, 1] * arrow_scale_2d,
+                   color='green', width=0.1, head_width=0.4, length_includes_head=True, label="PC2")
 
         plt.tight_layout()
         plt.show()
@@ -336,9 +340,5 @@ if __name__ == "__main__":
 
 # TODO:
 #   Possibilité de faire plusieurs coupes avec une distance entre les coupes constantes, ou des coupes à placer manuellement.
-#   Projeter en 2D puis faire la réduction du nuage avec les voxels ?
-#   Ne pas re projeter en 3D car ce n'est pas utile.
 #   Documenter toutes les méthodes utilisées. Pourquoi préférer une méthode à une autre ?
 #   Utiliser des class.
-#   Utiliser une PCA pour projeter les points dans le cas ou la coupe n'est pas parfaitement alignée avec un axe.
-#   Calculer aire de la surface afin de quantifier la performance du contour.
