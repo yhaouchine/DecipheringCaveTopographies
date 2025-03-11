@@ -153,8 +153,7 @@ def compute_area(contour2d: np.ndarray) -> float:
     return contour_area
 
 
-def display(pts: np.ndarray, contour2d: np.ndarray, projected_pts: np.ndarray, pca_axes: np.ndarray,
-            contour3d: np.ndarray = None) -> None:
+def display(pts: np.ndarray, contour2d: np.ndarray, projected_pts: np.ndarray, contour3d: np.ndarray = None) -> None:
     fig = plt.figure(figsize=(8, 8) if contour3d is None else (16, 8))
 
     # Adding a 3D plot if asked
@@ -175,10 +174,6 @@ def display(pts: np.ndarray, contour2d: np.ndarray, projected_pts: np.ndarray, p
 
     # Calculate the area enclosed in the contour
     area = compute_area(contour2d)
-
-    # PCA axes names
-    pca_x_label = "PCA Axis 1"
-    pca_y_label = "PCA Axis 2"
 
     # Fill the contour in the PCA plan
     polygon = Polygon(contour2d.tolist(), closed=True, facecolor='red', alpha=0.2, edgecolor='r', linewidth=2.0)
@@ -202,7 +197,7 @@ def display(pts: np.ndarray, contour2d: np.ndarray, projected_pts: np.ndarray, p
     plt.show()
 
 
-def pca_projection(points_3d: np.ndarray, diagnosis: bool = False, display: bool = False) \
+def pca_projection(points_3d: np.ndarray, diagnosis: bool = False, visualize: bool = False) \
         -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Projects a set of 3D points onto a 2D plane using PCA and rotates the projection so that the
@@ -211,7 +206,7 @@ def pca_projection(points_3d: np.ndarray, diagnosis: bool = False, display: bool
     This function prints the orientation of the PCA axes and the angle of PC1 before and after rotation.
 
     :param points_3d: A NumPy array of shape (n, 3), representing n points in 3D space.
-    :param display: Choose whether to display the PCA projection (useful for diagnosis).
+    :param visualize: Choose whether to display the PCA projection (useful for diagnosis).
     :param diagnosis: Choose whether to perform the diagnosis.
 
     :return: A tuple containing:
@@ -219,6 +214,9 @@ def pca_projection(points_3d: np.ndarray, diagnosis: bool = False, display: bool
         - pca_axes (np.ndarray of shape (3, 3)): The principal component vectors from the PCA.
         - mean (np.ndarray of shape (3,)): The mean of the original points.
     """
+    # 0. Global reference
+    global_x = np.array([1, 0, 0])  # Reference direction for PC1
+    global_y = np.array([0, 1, 0])  # Reference direction for PC2
 
     # 1. Center the points
     mean = np.mean(points_3d, axis=0)
@@ -229,7 +227,6 @@ def pca_projection(points_3d: np.ndarray, diagnosis: bool = False, display: bool
     pca.fit(centered_points)
     pca_axes = pca.components_  # Rows: PC1, PC2, PC3
 
-    # Project in 2D
     points_2d = pca.transform(centered_points)[:, :2]  # (n,2)
 
     if diagnosis:
@@ -237,31 +234,32 @@ def pca_projection(points_3d: np.ndarray, diagnosis: bool = False, display: bool
         print("=== PCA DIAGNOSIS ===")
         print("Eigenvalues:")
         for i, val in enumerate(eigenvalues):
-            print(f" PC{i + 1}: {val:.5f}")
+            print(f" PC{i + 1}: {val:.4f}")
 
-        # Extract PC1 and PC2 axis in 2D
-        PC1_2d = pca_axes[0][:2]
-        PC2_2d = pca_axes[1][:2]
+        PC1 = pca_axes[0]
+        PC2 = pca_axes[1]
 
-        # Normalize the vectors
-        PC1_2d_norm = PC1_2d / np.linalg.norm(PC1_2d)
-        PC2_2d_norm = PC2_2d / np.linalg.norm(PC2_2d)
+        normalized_PC1 = PC1 / np.linalg.norm(PC1)
+        normalized_PC2 = PC2 / np.linalg.norm(PC2)
+        dot_raw = np.dot(normalized_PC1, normalized_PC2)
+        print(f"Raw PC1_2d normalized: {normalized_PC1}")
+        print(f"Raw PC2_2d normalized: {normalized_PC2}")
+        print(f"Scalar product before transformation: {dot_raw:.4f}")
 
-        # compute the scalar product
-        dot = np.dot(PC1_2d_norm, PC2_2d_norm)
-        print(f"PC1_2d normalized: {PC1_2d_norm}")
-        print(f"PC2_2d normalized: {PC2_2d_norm}")
-        print(f"Scalar product = {dot:.5f}")
+        if np.dot(PC1, global_x) < 0:
+            PC1 *= -1
 
-    if display:
+        if np.dot(PC2, global_y) < 0:
+            PC2 *= -1
+
+    if visualize:
         fig = plt.figure(figsize=(14, 6))
 
         # 3D view
         ax3d = fig.add_subplot(1, 2, 1, projection='3d')
         ax3d.scatter(
             points_3d[:, 0], points_3d[:, 1], points_3d[:, 2],
-            c='black', s=1, alpha=0.6, label="Point Cloud"
-                     )
+            c='black', s=1, alpha=0.6, label="Point Cloud")
         ax3d.set_title("Nuage 3D")
         ax3d.set_xlabel("X")
         ax3d.set_ylabel("Y")
@@ -339,6 +337,6 @@ if __name__ == "__main__":
         sys.exit()
 
 # TODO:
-#   Possibilité de faire plusieurs coupes avec une distance entre les coupes constantes, ou des coupes à placer manuellement.
+#   Faire plusieurs coupes avec une distance entre les coupes constantes, ou des coupes à placer manuellement.
 #   Documenter toutes les méthodes utilisées. Pourquoi préférer une méthode à une autre ?
 #   Utiliser des class.
