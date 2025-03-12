@@ -1,7 +1,6 @@
 import numpy as np
 import alphashape
-import time
-from process_cloud import import_cloud, display, pca_projection, pca_correction
+from process_cloud import import_cloud, display, pca_projection
 from typing import Tuple
 
 
@@ -21,6 +20,7 @@ def calculate_alpha_shape(alpha: float, pts: list | np.ndarray) -> Tuple[any, fl
         - The computed alpha shape as a `Polygon`, `MultiPolygon`, or `None` (if the computation fails).
         - The time taken to compute the shape (in seconds).
     """
+    import time
     start_time = time.perf_counter()
     a_shape = alphashape.alphashape(pts, alpha)
     end_time = time.perf_counter()
@@ -32,7 +32,7 @@ if __name__ == "__main__":
     point_cloud, point_cloud_name = import_cloud(pc_name="cross_section_3_45d_clean.ply", parent_folder="saved_clouds")
 
     # Reducing the cloud
-    v_size_1 = 0.01
+    v_size_1 = 0.5
     reduced_point_cloud = point_cloud.voxel_down_sample(voxel_size=v_size_1)
     points_reduced = np.asarray(reduced_point_cloud.points)
 
@@ -42,12 +42,7 @@ if __name__ == "__main__":
     if points_reduced.shape[0] < 3:
         raise ValueError("Not enough points to create a contour.")
 
-    points_2d, pca_axes, mean, azimuth = pca_projection(points=points_reduced)
-
-    print("PCA Axes:\n", pca_axes)
-    print("Mean position:\n", mean)
-
-    points_2d = pca_correction(pca_axes=pca_axes, points_2d=points_2d)
+    points_2d, pca_axes, mean = pca_projection(points_3d=points_reduced, diagnosis=True, visualize=True)
 
     alpha_shape, duration = calculate_alpha_shape(alpha=3.5, pts=points_2d)
 
@@ -60,4 +55,4 @@ if __name__ == "__main__":
     x, y = alpha_shape.exterior.xy
     contour_2d = np.column_stack((x, y))
 
-    display(pts=points_displayed, contour2d=contour_2d, projected_pts=points_2d, pca_axes=pca_axes)
+    display(pts=points_displayed, contour2d=contour_2d, projected_pts=points_2d)
