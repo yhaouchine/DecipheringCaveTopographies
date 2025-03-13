@@ -153,7 +153,9 @@ def compute_area(contour2d: np.ndarray) -> float:
     return contour_area
 
 
-def display(pts: np.ndarray, contour2d: np.ndarray, projected_pts: np.ndarray, contour3d: np.ndarray = None) -> None:
+def display(pts: np.ndarray, contour2d: np.ndarray, projected_pts: np.ndarray,
+            contour3d: np.ndarray | None = None) -> None:
+
     fig = plt.figure(figsize=(8, 8) if contour3d is None else (16, 8))
 
     # Adding a 3D plot if asked
