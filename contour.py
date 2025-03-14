@@ -1,10 +1,18 @@
 import numpy as np
 import alphashape
+import logging
 from typing import Tuple, Optional
 from open3d.cpu.pybind.geometry import PointCloud
 from concave_hull import concave_hull
 from process_cloud import display, import_cloud, pca_projection
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+
+logger = logging.getLogger(__name__)
 
 class ContourExtractor:
     def __init__(self, voxel_size: float = 0.5, pc_name: str = None, parent_folder: str = None):
@@ -23,13 +31,24 @@ class ContourExtractor:
         self.pca_projection()
 
     def load_cloud(self):
-        self.original_cloud, _ = import_cloud(pc_name=self.pc_name, parent_folder=self.parent_folder)
+        try:
+            self.original_cloud, _ = import_cloud(pc_name=self.pc_name, parent_folder=self.parent_folder)
+            logger.info(f"Point cloud {self.pc_name} loaded successfully.")
+        except Exception as e:
+            logger.error(f"An error occurred while loading the point cloud: {e}")
+            raise
 
     def downsample(self):
-        self.reduced_cloud = self.original_cloud.voxel_down_sample(voxel_size=self.voxel_size)
-        self.points_3d = np.asarray(self.reduced_cloud.points)
-        if self.points_3d.shape[0] < 3:
-            raise ValueError("Not enough points to generate a contour.")
+        try:
+            self.reduced_cloud = self.original_cloud.voxel_down_sample(voxel_size=self.voxel_size)
+            self.points_3d = np.asarray(self.reduced_cloud.points)
+            if self.points_3d.shape[0] < 3:
+                logger.warning("Not enough points to generate a contour.")
+                raise ValueError("Not enough points to generate a contour.")
+            logger.info("Point cloud downsampled to {self.points_3d.shape[0]} points.")
+        except Exception as e:
+            logger.error(f"An error occurred while downsampling the point cloud: {e}")
+            raise
 
     def pca_projection(self):
         diagnosis = True
@@ -53,11 +72,20 @@ class ContourExtractor:
             - The time taken to compute the shape (in seconds).        
         """
         import time
-        start_time = time.perf_counter()
-        self.contour = alphashape.alphashape(self.points_2d, alpha)
-        end_time = time.perf_counter()
-        self.durations = end_time - start_time
-        return self.contour, self.durations
+        try:
+            start_time = time.perf_counter()
+            self.contour = alphashape.alphashape(self.points_2d, alpha)
+            end_time = time.perf_counter()
+            self.durations = end_time - start_time
+            if self.contour is None :
+                logger.warning("Alpha-shape computation returned None.")
+                raise ValueError("Alpha-shape computation failed, try adjusting alpha.")
+            
+            logger.info(f"Convex hull computed successfully in {self.durations:.2f} seconds.")
+            return self.contour, self.durations
+        except Exception as e:
+            logger.error(f"An error occurred while computing the convex hull: {e}")
+            raise
 
     def concave_hull(self, c: float = 1.0, length_threshold: float = 0.0) -> Tuple[np.ndarray, float]:
         """
@@ -113,6 +141,7 @@ class ContourExtractor:
         else:
             x, y = self.contour.exterior.xy
             contour_2d = np.column_stack((x, y))
+        logger.info(f"Displaying contour with {contour_2d.shape[0]} vertices.")
         display(pts=self.points_3d, contour2d=contour_2d, projected_pts=self.points_2d)
 
     def extract(self, method: str = 'concave'):
@@ -121,9 +150,9 @@ class ContourExtractor:
         elif method == 'concave':
             self.concave_hull(c=1.0, length_threshold=0.0)
         else:
-            raise ValueError(f"Method {method} not supported")
+            logger.error("Invalid method. Please choose either 'convex' or 'concave'.")
 
-        print(f"Contour computing time: {self.durations:.2f} secondes")
+        logger.info(f"Contour computing time: {self.durations:.2f} seconds")
         self.display_contour()
 
 
