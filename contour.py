@@ -1,21 +1,29 @@
 import numpy as np
 import alphashape
 import logging
-from typing import Tuple, Optional
+import matplotlib.pyplot as plt
+from typing import Tuple, Optional, Union
 from open3d.cpu.pybind.geometry import PointCloud
 from concave_hull import concave_hull
-from process_cloud import display, import_cloud, pca_projection
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
+from process_cloud import display, import_cloud
+from sklearn.decomposition import PCA
 
 logger = logging.getLogger(__name__)
 
+
 class ContourExtractor:
     def __init__(self, voxel_size: float = 0.5, pc_name: str = None, parent_folder: str = None):
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.INFO)
+
+        if not self.logger.handlers:
+            ch = logging.StreamHandler()
+            formatter = logging.Formatter("%(message)s")
+            ch.setFormatter(formatter)
+            self.logger.addHandler(ch)
+        self.mean = None
+        self.pca_axes = None
+        self.projected_points = None
         self.voxel_size = voxel_size
         self.pc_name = pc_name
         self.parent_folder = parent_folder
@@ -33,7 +41,9 @@ class ContourExtractor:
     def load_cloud(self):
         try:
             self.original_cloud, _ = import_cloud(pc_name=self.pc_name, parent_folder=self.parent_folder)
-            logger.info(f"Point cloud {self.pc_name} loaded successfully.")
+            logger.info("")
+            logger.info(f"===== Loading point cloud {self.pc_name}... =====")
+            logger.info(f"Point cloud '{self.pc_name}' loaded successfully.")
         except Exception as e:
             logger.error(f"An error occurred while loading the point cloud: {e}")
             raise
@@ -45,15 +55,114 @@ class ContourExtractor:
             if self.points_3d.shape[0] < 3:
                 logger.warning("Not enough points to generate a contour.")
                 raise ValueError("Not enough points to generate a contour.")
-            logger.info("Point cloud downsampled to {self.points_3d.shape[0]} points.")
+            logger.info("")
+            logger.info("===== Downsampling the point cloud... =====")
+            logger.info("Point cloud downsampled successfully.")
+            logger.info("")
+
         except Exception as e:
             logger.error(f"An error occurred while downsampling the point cloud: {e}")
             raise
 
-    def pca_projection(self):
-        diagnosis = True
-        visualize = True
-        self.points_2d, _, _ = pca_projection(points_3d=self.points_3d, diagnosis=diagnosis, visualize=visualize)
+    def pca_projection(self, diagnosis: bool = False, visualize: bool = False) -> np.ndarray:
+        """
+        Project the 3D points onto a 2D plane using Principal Component Analysis (PCA).
+        
+        Parameters:
+        ----------
+        diagnosis : bool, optional (default=False)
+            Whether to display the PCA diagnosis plot.
+        visualize : bool, optional (default=False)
+            Whether to display the 2D projection of the point cloud.
+
+        Returns:
+        -------
+        A NumPy array of shape (n, 2) containing the 2D coordinates of the projected points.
+
+        """
+        self.mean = np.mean(self.points_3d, axis=0)
+        centered_points = self.points_3d - self.mean
+        covariance_matrix = np.cov(centered_points, rowvar=False)
+
+        pca = PCA(n_components=3)
+        pca.fit(centered_points)
+        self.pca_axes = pca.components_
+
+        self.points_2d = pca.transform(centered_points)[:, :2]
+        self.projected_points = self.points_2d
+
+        if diagnosis:
+            self._diagnose_pca(pca)
+
+        if visualize:
+            self._visualize_pca(pca)
+
+        return self.projected_points
+
+    def _diagnose_pca(self, pca: PCA):
+        self.logger.info("==================== PCA Diagnosis ====================")
+
+        # 1. Verify the eigenvalues as it indicates the variance of the data along the principal components
+        eigenvalues = pca.explained_variance_
+        self.logger.info("----- Eigenvalues -----")
+        for i, (eig) in enumerate(eigenvalues, 1):
+            self.logger.info(f"Eigenvalue {i}: {eig:.4f}")
+        self.logger.info("")
+
+        # 2. Verify the principal components
+        self.logger.info("----- Principal components -----")
+        for i, axis in enumerate(self.pca_axes, 1):
+            self.logger.info(f"Axis PC{i}: {axis}")
+        self.logger.info("")
+
+        # 3. Verify orthogonality of the principal components
+        dot_product = np.dot(self.pca_axes[0], self.pca_axes[1])
+        self.logger.info(f"PC1 . PC2 = {dot_product:.4f}")
+
+        self.logger.info("=================== END of Diagnosis ===================")
+
+    def _visualize_pca(self, pca: PCA):
+
+        fig = plt.figure(figsize=(12, 5))
+
+        # 3D view
+        ax3d = fig.add_subplot(121, projection='3d')
+        ax3d.scatter(self.points_3d[:, 0], self.points_3d[:, 1], self.points_3d[:, 2], c='black', s=1, alpha=0.6,
+                     label='3D Points')
+        ax3d.set_title("3D Point Cloud")
+
+        # Adding arrows for the principal components
+        scale = 0.1 * np.linalg.norm(self.points_3d.max(axis=0) - self.points_3d.min(axis=0))
+        colors = ['red', 'green', 'blue']
+        labels = ['PC1', 'PC2', 'PC3']
+        for i, (axis, color, label) in enumerate(zip(self.pca_axes, colors, labels), 1):
+            ax3d.quiver(*self.mean, *axis * scale, color=color, label=label)
+
+        ax3d.legend()
+
+        # 2D view
+        ax2d = fig.add_subplot(122)
+        ax2d.scatter(self.projected_points[:, 0], self.projected_points[:, 1], c='black', s=1, alpha=0.6,
+                     label='2D Projection')
+        ax2d.set_title("2D Projection of the Point Cloud")
+        ax2d.axis('equal')
+
+        # Create vectors for the principal components
+        pc1_3d = self.pca_axes[0] * 0.2
+        pc2_3d = self.pca_axes[1] * 0.2
+
+        # Transform the vectors to the 2D plane
+        pc1_2d = pca.transform([pc1_3d])
+        pc2_2d = pca.transform([pc2_3d])
+
+        arrow_scale_2d = 20
+        ax2d.arrow(0, 0, pc1_2d[0, 0] * arrow_scale_2d, pc1_2d[0, 1] * arrow_scale_2d, color='red', width=0.01, head_width = 0.4, label='PC1')
+        ax2d.arrow(0, 0, pc2_2d[0, 0] * arrow_scale_2d, pc2_2d[0, 1] * arrow_scale_2d, color='green', width=0.01, head_width = 0.4, label='PC2')
+
+        ax2d.legend()
+
+        plt.tight_layout()
+        plt.show()
 
     def convex_hull(self, alpha: float) -> Tuple[any, float]:
         """
@@ -77,11 +186,12 @@ class ContourExtractor:
             self.contour = alphashape.alphashape(self.points_2d, alpha)
             end_time = time.perf_counter()
             self.durations = end_time - start_time
-            if self.contour is None :
+            if self.contour is None:
                 logger.warning("Alpha-shape computation returned None.")
                 raise ValueError("Alpha-shape computation failed, try adjusting alpha.")
-            
-            logger.info(f"Convex hull computed successfully in {self.durations:.2f} seconds.")
+
+            logger.info("")
+            logger.info("===== Computing convex hull... =====")
             return self.contour, self.durations
         except Exception as e:
             logger.error(f"An error occurred while computing the convex hull: {e}")
@@ -129,6 +239,8 @@ class ContourExtractor:
         end_time = time.perf_counter()
         self.durations = end_time - start_time
         self.contour = hull
+        logger.info("")
+        logger.info("===== Computing concave hull... =====")
 
         return self.contour, self.durations
 
@@ -141,22 +253,35 @@ class ContourExtractor:
         else:
             x, y = self.contour.exterior.xy
             contour_2d = np.column_stack((x, y))
-        logger.info(f"Displaying contour with {contour_2d.shape[0]} vertices.")
         display(pts=self.points_3d, contour2d=contour_2d, projected_pts=self.points_2d)
 
-    def extract(self, method: str = 'concave'):
+    def extract(self, method: str = 'concave', alpha: Optional[float] = 3.5, concavity: Optional[float] = None, length_threshold: Optional[float] = None):
         if method == 'convex':
-            self.convex_hull(alpha=3.5)
+            self.convex_hull(alpha=alpha)
         elif method == 'concave':
-            self.concave_hull(c=1.0, length_threshold=0.0)
+            if concavity is None or length_threshold is None:
+                raise ValueError("Concavity and length_threshold must be provided for concave method.")
+            self.concave_hull(c=concavity, length_threshold=length_threshold)
         else:
             logger.error("Invalid method. Please choose either 'convex' or 'concave'.")
 
-        logger.info(f"Contour computing time: {self.durations:.2f} seconds")
+        logger.info("Hull extraction completed.")
+        logger.info(f"Hull computing time: {self.durations:.4f} seconds")
         self.display_contour()
 
 
 if __name__ == "__main__":
-    cloud = ContourExtractor(pc_name="cross_section_3_45d_clean.ply", parent_folder="saved_clouds")
     
-    cloud.extract(method='concave')
+    voxel_size = 0.01
+    method = 'concave'
+
+    alpha = 3.5
+    concavity = 1.0
+    length_threshold = 0.1
+
+    diagnose = True
+    visualize = True
+
+    cloud = ContourExtractor(voxel_size=voxel_size, pc_name="cross_section_3_45d_clean.ply", parent_folder="saved_clouds")
+    project_points = cloud.pca_projection(diagnosis=diagnose, visualize=visualize)
+    cloud.extract(method=method, alpha=alpha, concavity=concavity, length_threshold=length_threshold)
