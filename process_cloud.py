@@ -14,7 +14,7 @@ from open3d.cpu.pybind.geometry import PointCloud, Geometry, AxisAlignedBounding
 from pathlib import Path
 from tkinter import simpledialog, messagebox, Tk
 from sklearn.decomposition import PCA
-from typing import Tuple
+from typing import Tuple, Union
 
 background_color = {
     "white": [1.0, 1.0, 1.0],
@@ -23,7 +23,7 @@ background_color = {
 }
 
 
-def import_cloud(pc_name: str, parent_folder: str) -> PointCloud | tuple:
+def import_cloud(pc_name: str, parent_folder: str) -> Tuple[PointCloud, str]:
     """
     Import point cloud with Open3D.
 
@@ -37,9 +37,9 @@ def import_cloud(pc_name: str, parent_folder: str) -> PointCloud | tuple:
     return pc, pc_name
 
 
-def o3d_visualizer(window_name: str, geom1: Geometry = None, geom2: Geometry = None, save: bool | None = None,
+def o3d_visualizer(window_name: str, geom1: Geometry = None, geom2: Geometry = None, save = None,
                    color_name: str = "white",
-                   filename: Path | str | None = None) -> None | list:
+                   filename: Union[Path, str,  None] = None) -> Union[np.ndarray, None]:
     """
     Function to create a visualizer to display the data.
 
@@ -107,7 +107,7 @@ def o3d_visualizer(window_name: str, geom1: Geometry = None, geom2: Geometry = N
     return picked_points
 
 
-def extract_cross_section(pc: PointCloud, position: np.ndarray, e: float | int) -> PointCloud:
+def extract_cross_section(pc: PointCloud, position: np.ndarray, e: Union[float, int]) -> PointCloud:
     """
     Function to extract a cross-section from a point cloud
 
@@ -125,7 +125,7 @@ def extract_cross_section(pc: PointCloud, position: np.ndarray, e: float | int) 
     return cut_pc
 
 
-def create_bounding_box(center_point: np.ndarray, size: float | int) -> AxisAlignedBoundingBox:
+def create_bounding_box(center_point: np.ndarray, size: Union[float, int]) -> AxisAlignedBoundingBox:
     """
     Function to create a bounding box
     
@@ -154,7 +154,7 @@ def compute_area(contour2d: np.ndarray) -> float:
 
 
 def display(pts: np.ndarray, contour2d: np.ndarray, projected_pts: np.ndarray,
-            contour3d: np.ndarray | None = None) -> None:
+            contour3d: Union[np.ndarray, None] = None) -> None:
 
     fig = plt.figure(figsize=(8, 8) if contour3d is None else (16, 8))
 
@@ -219,6 +219,7 @@ def pca_projection(points_3d: np.ndarray, diagnosis: bool = False, visualize: bo
     # 0. Global reference
     global_x = np.array([1, 0, 0])  # Reference direction for PC1
     global_y = np.array([0, 1, 0])  # Reference direction for PC2
+    global_z = np.array([0, 0, 1])
 
     # 1. Center the points
     mean = np.mean(points_3d, axis=0)
@@ -233,78 +234,100 @@ def pca_projection(points_3d: np.ndarray, diagnosis: bool = False, visualize: bo
 
     if diagnosis:
         eigenvalues = pca.explained_variance_
-        print("=== PCA DIAGNOSIS ===")
-        print("Eigenvalues:")
-        for i, val in enumerate(eigenvalues):
-            print(f" PC{i + 1}: {val:.4f}")
+        print("===== PCA DIAGNOSIS =====")
+        print(f"Eigenvalues:")
+        for i, ev in enumerate(eigenvalues):
+            print(f"Eigenvalue {i + 1}: {ev:.4f}")
+        print(f"Explained variance ratio: {pca.explained_variance_ratio_}")
 
         PC1 = pca_axes[0]
         PC2 = pca_axes[1]
+        PC3 = pca_axes[2]
+
+        print(f"PCA axes:")
+        print(f"PC1: {PC1}")
+        print(f"PC2: {PC2}")
+        print(f"PC3: {PC3}")
 
         normalized_PC1 = PC1 / np.linalg.norm(PC1)
         normalized_PC2 = PC2 / np.linalg.norm(PC2)
-        dot_raw = np.dot(normalized_PC1, normalized_PC2)
-        print(f"Raw PC1_2d normalized: {normalized_PC1}")
-        print(f"Raw PC2_2d normalized: {normalized_PC2}")
-        print(f"Scalar product before transformation: {dot_raw:.4f}")
+        normalized_PC3 = PC3 / np.linalg.norm(PC3)
 
-        if np.dot(PC1, global_x) < 0:
-            PC1 *= -1
+        print(f"Normalized PCA axes:")
+        print(f"PC1: {normalized_PC1}")
+        print(f"PC2: {normalized_PC2}")
+        print(f"PC3: {normalized_PC3}")
 
-        if np.dot(PC2, global_y) < 0:
-            PC2 *= -1
+        scalar_product_1 = np.dot(normalized_PC1, global_x)
+        scalar_product_2 = np.dot(normalized_PC2, global_y)
+        scalar_product_3 = np.dot(normalized_PC3, global_z)
 
-    if visualize:
-        fig = plt.figure(figsize=(14, 6))
+        print(f"Scalar products with global axes:")
+        print(f"PC1: {scalar_product_1:.4f}")
+        print(f"PC2: {scalar_product_2:.4f}")
+        print(f"PC3: {scalar_product_3:.4f}")
 
-        # 3D view
-        ax3d = fig.add_subplot(1, 2, 1, projection='3d')
-        ax3d.scatter(
-            points_3d[:, 0], points_3d[:, 1], points_3d[:, 2],
-            c='black', s=1, alpha=0.6, label="Point Cloud")
-        ax3d.set_title("Nuage 3D")
-        ax3d.set_xlabel("X")
-        ax3d.set_ylabel("Y")
-        ax3d.set_zlabel("Z")
-        ax3d.legend()
+        PC1dotPC2 = np.dot(normalized_PC1, normalized_PC2)
+        PC1dotPC3 = np.dot(normalized_PC1, normalized_PC3)
+        PC2dotPC3 = np.dot(normalized_PC2, normalized_PC3)
 
-        # Adding arrows to représent the PCA axes orientation in 3D
-        scale = 0.1 * np.linalg.norm(np.max(points_3d, axis=0) - np.min(points_3d, axis=0))
-        colors = ['red', 'green', 'blue']
-        labels = ['PC1', 'PC2', 'PC3']
-        for i in range(3):
-            ax3d.quiver(mean[0], mean[1], mean[2],
-                        pca_axes[i, 0], pca_axes[i, 1], pca_axes[i, 2],
-                        color=colors[i], length=scale, normalize=True, label=labels[i])
+        print(f"Scalar products between PCA axes:")
+        print(f"PC1 . PC2: {PC1dotPC2:.4f}")
+        print(f"PC1 . PC3: {PC1dotPC3:.4f}")
+        print(f"PC2 . PC3: {PC2dotPC3:.4f}")
+        print("=========================")
 
-        ax3d.legend()
+        if visualize:
+            fig = plt.figure(figsize=(14, 6))
 
-        # 2D view: Projection on PC1-PC2 plan
-        ax2d = fig.add_subplot(1, 2, 2)
-        ax2d.scatter(points_2d[:, 0], points_2d[:, 1], c='black', s=1, alpha=0.6, label="Projection (PC1-PC2)")
-        ax2d.set_title("Projection PCA (PC1 vs PC2)")
-        ax2d.set_xlabel("PC1")
-        ax2d.set_ylabel("PC2")
-        ax2d.axis("equal")
+            # 3D view
+            ax3d = fig.add_subplot(1, 2, 1, projection='3d')
+            ax3d.scatter(
+                points_3d[:, 0], points_3d[:, 1], points_3d[:, 2],
+                c='black', s=1, alpha=0.6, label="Point Cloud")
+            ax3d.set_title("Nuage 3D")
+            ax3d.set_xlabel("X")
+            ax3d.set_ylabel("Y")
+            ax3d.set_zlabel("Z")
+            ax3d.legend()
 
-        # Create small 3D vectors along PC1 & PC2
-        pc1_3d = pca_axes[0] * 0.2  # shape (3,)
-        pc2_3d = pca_axes[1] * 0.2  # shape (3,)
+            # Adding arrows to représent the PCA axes orientation in 3D
+            scale = 0.1 * np.linalg.norm(np.max(points_3d, axis=0) - np.min(points_3d, axis=0))
+            colors = ['red', 'green', 'blue']
+            labels = ['PC1', 'PC2', 'PC3']
+            for i in range(3):
+                ax3d.quiver(mean[0], mean[1], mean[2],
+                            pca_axes[i, 0], pca_axes[i, 1], pca_axes[i, 2],
+                            color=colors[i], length=scale, normalize=True, label=labels[i])
 
-        # We transform them: transform expects shape (n,3)
-        pc1_2d = pca.transform([pc1_3d])  # shape (1,2)
-        pc2_2d = pca.transform([pc2_3d])  # shape (1,2)
+            ax3d.legend()
 
-        # Now we can plot them as arrows from (0,0) in the 2D plane
-        # Let's scale them a bit more for visibility
-        arrow_scale_2d = 20
-        ax2d.arrow(0, 0, pc1_2d[0, 0] * arrow_scale_2d, pc1_2d[0, 1] * arrow_scale_2d,
-                   color='red', width=0.1, head_width=0.4, length_includes_head=True, label="PC1")
-        ax2d.arrow(0, 0, pc2_2d[0, 0] * arrow_scale_2d, pc2_2d[0, 1] * arrow_scale_2d,
-                   color='green', width=0.1, head_width=0.4, length_includes_head=True, label="PC2")
+            # 2D view: Projection on PC1-PC2 plan
+            ax2d = fig.add_subplot(1, 2, 2)
+            ax2d.scatter(points_2d[:, 0], points_2d[:, 1], c='black', s=1, alpha=0.6, label="Projection (PC1-PC2)")
+            ax2d.set_title("Projection PCA (PC1 vs PC2)")
+            ax2d.set_xlabel("PC1")
+            ax2d.set_ylabel("PC2")
+            ax2d.axis("equal")
 
-        plt.tight_layout()
-        plt.show()
+            # Create small 3D vectors along PC1 & PC2
+            pc1_3d = pca_axes[0] * 0.2  # shape (3,)
+            pc2_3d = pca_axes[1] * 0.2  # shape (3,)
+
+            # We transform them: transform expects shape (n,3)
+            pc1_2d = pca.transform([pc1_3d])  # shape (1,2)
+            pc2_2d = pca.transform([pc2_3d])  # shape (1,2)
+
+            # Now we can plot them as arrows from (0,0) in the 2D plane
+            # Let's scale them a bit more for visibility
+            arrow_scale_2d = 20
+            ax2d.arrow(0, 0, pc1_2d[0, 0] * arrow_scale_2d, pc1_2d[0, 1] * arrow_scale_2d,
+                       color='red', width=0.1, head_width=0.4, length_includes_head=True, label="PC1")
+            ax2d.arrow(0, 0, pc2_2d[0, 0] * arrow_scale_2d, pc2_2d[0, 1] * arrow_scale_2d,
+                       color='green', width=0.1, head_width=0.4, length_includes_head=True, label="PC2")
+
+            plt.tight_layout()
+            plt.show()
 
     return points_2d, pca_axes, mean
 
