@@ -38,6 +38,10 @@ class ContourExtractor:
         self.perimeter: Optional[float] = None
 
     def load_cloud(self, pc_name: str, parent_folder: str):
+        """
+        Load a point cloud from a file using Open3D point cloud reading function.        
+        """
+
         self.pc_name = pc_name
         self.parent_folder = parent_folder
         try:
@@ -51,6 +55,15 @@ class ContourExtractor:
             raise
 
     def downsample(self, voxel_size: Optional[float] = None):
+        """
+        Downsample the point cloud using voxel grid downsampling.
+
+        Parameters:
+        ----------
+        voxel_size : float, optional (default=None)
+            The size of the voxel grid used for downsampling.  
+        """
+
         try:
             self.reduced_cloud = self.original_cloud.voxel_down_sample(voxel_size=voxel_size)
             self.points_3d = np.asarray(self.reduced_cloud.points)
@@ -79,8 +92,8 @@ class ContourExtractor:
         Returns:
         -------
         A NumPy array of shape (n, 2) containing the 2D coordinates of the projected points.
-
         """
+
         self.mean = np.mean(self.points_3d, axis=0)
         centered_points = self.points_3d - self.mean
         covariance_matrix = np.cov(centered_points, rowvar=False)
@@ -101,6 +114,15 @@ class ContourExtractor:
         return self.projected_points
 
     def _diagnose_pca(self, pca: PCA):
+        """
+        Display a diagnosis of the Principal Component Analysis (PCA) results.
+        
+        Parameters:
+        ----------
+        pca : PCA
+            The PCA object fitted on the centered point cloud.
+        """
+
         self.logger.info("==================== PCA Diagnosis ====================")
 
         # 1. Verify the eigenvalues as it indicates the variance of the data along the principal components
@@ -123,6 +145,14 @@ class ContourExtractor:
         self.logger.info("=================== END of Diagnosis ===================")
 
     def _visualize_pca(self, pca: PCA):
+        """
+        Display a 3D and 2D visualization of the point cloud and its principal components.
+
+        Parameters:
+        ----------
+        pca : PCA
+            The PCA object fitted on the centered point cloud.
+        """
 
         fig = plt.figure(figsize=(12, 5))
 
@@ -201,6 +231,7 @@ class ContourExtractor:
             - The computed alpha shape as a `Polygon`, `MultiPolygon`, or `None` (if the computation fails).
             - The time taken to compute the shape (in seconds).        
         """
+
         import time
         try:
             start_time = time.perf_counter()
@@ -247,8 +278,8 @@ class ContourExtractor:
             A tuple containing:
                 - hull: A NumPy array of shape (m, 2) of the ordered vertices of the concave hull polygon.
                 - time: A float representing the computation time in seconds.
-
         """
+
         import time
         start_time = time.perf_counter()
         hull = concave_hull(self.points_2d, concavity=c, length_threshold=length_threshold)
@@ -266,6 +297,15 @@ class ContourExtractor:
         return self.contour, self.durations
 
     def compute_area(self):
+        """
+        Compute the area enclosed by the contour using the Shoelace formula.
+        The Shoelace formula is a mathematical algorithm used to determine the area of a simple polygon
+        whose vertices are described by their Cartesian coordinates in the plane.
+
+        The equation is provided as follows:
+        Area = 0.5 * |(x0y1 + x1y2 + ... + xn-1yn + xny0) - (y0x1 + y1x2 + ... + yn-1xn + ynx0)|
+        """
+
         if self.contour is None:
             raise ValueError("No contour computed, please compute a contour first.")
         else:
@@ -276,6 +316,10 @@ class ContourExtractor:
             logger.info(f"Area of the contour: {self.area:.4f} m²")
     
     def compute_perimeter(self):
+        """
+        Compute the perimeter of the contour by summing the Euclidean distances between consecutive points.
+        """
+
         if self.contour is None:
             raise ValueError("No contour computed, please compute a contour using the computing methods implemented.")
         else:
@@ -286,6 +330,10 @@ class ContourExtractor:
             logger.info(f"Perimeter of the contour: {self.perimeter:.4f} m")
 
     def display_contour(self):
+        """
+        Display the contour in the PCA plane along with the point cloud and the computed area and perimeter.
+        """
+
         fig = plt.figure(figsize=(8, 8) if self.points_3d is None else (16, 8))
 
         # Adding a 3D plot if asked
@@ -334,6 +382,25 @@ class ContourExtractor:
 
     def extract(self, method: str = 'concave', alpha: Optional[float] = 3.5, concavity: Optional[float] = None,
                 length_threshold: Optional[float] = None):
+        """
+        Extract the contour of the point cloud using either the convex or concave hull method.
+        
+        Parameters:
+        ----------
+        method : str, optional (default='concave')
+            The method used to extract the contour. Choose between 'convex' or 'concave'.
+
+        alpha : float, optional (default=3.5)
+            The alpha parameter controlling the level of concavity in the convex hull method.
+
+        concavity : float, optional (default=None)
+            The concavity coefficient controlling the level of detail of the hull in the concave hull method.
+            
+        length_threshold : float, optional (default=None)
+            The minimum edge length below which segments are ignored during the hull construction,
+            which helps filter out edges caused by noise.
+        """
+
         if method == 'convex':
             self.convex_hull(alpha=alpha)
         elif method == 'concave':
@@ -341,7 +408,7 @@ class ContourExtractor:
                 raise ValueError("Concavity and length_threshold must be provided for concave method.")
             self.concave_hull(c=concavity, length_threshold=length_threshold)
         else:
-            logger.error("Invalid method. Please choose either 'convex' or 'concave'.")
+            raise ValueError("Invalid method. Please choose either 'convex' or 'concave'.")
 
         logger.info("Hull extraction completed.")
         logger.info(f"Hull computing time: {self.durations:.4f} seconds")

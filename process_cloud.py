@@ -23,20 +23,6 @@ background_color = {
 }
 
 
-def import_cloud(pc_name: str, parent_folder: str) -> Tuple[PointCloud, str]:
-    """
-    Import point cloud with Open3D.
-
-    @param pc_name: name of the point cloud file
-    @param parent_folder: name of the folder containing the point cloud
-    @return: The point cloud
-    """
-    pc_name = pc_name
-    folder = parent_folder + "/"
-    pc = o3d.io.read_point_cloud(folder + pc_name)
-    return pc, pc_name
-
-
 def o3d_visualizer(window_name: str, geom1: Geometry = None, geom2: Geometry = None, save = None,
                    color_name: str = "white",
                    filename: Union[Path, str,  None] = None) -> Union[np.ndarray, None]:
@@ -139,66 +125,6 @@ def create_bounding_box(center_point: np.ndarray, size: Union[float, int]) -> Ax
     return o3d.geometry.AxisAlignedBoundingBox(min_bound, max_bound)
 
 
-def compute_area(contour2d: np.ndarray) -> float:
-    """
-    Compute the area enclosed by a 2D contour using the Shoelace formula.
-
-    @param contour2d:
-    @return:
-    """
-
-    x, y = contour2d[:, 0], contour2d[:, 1]
-    contour_area = 0.5 * np.abs(np.sum(x[:-1] * y[1:] - x[1:] * y[:-1]) + (x[-1] * y[0] - x[0] * y[-1]))
-
-    return contour_area
-
-
-def display(pts: np.ndarray, contour2d: np.ndarray, projected_pts: np.ndarray,
-            contour3d: Union[np.ndarray, None] = None) -> None:
-
-    fig = plt.figure(figsize=(8, 8) if contour3d is None else (16, 8))
-
-    # Adding a 3D plot if asked
-    if contour3d is not None:
-        ax3d = fig.add_subplot(121, projection='3d')
-        ax3d.scatter(pts[:, 0], pts[:, 1], pts[:, 2], c='blue', s=1, label="Point cloud")
-        ax3d.plot(contour3d[:, 0], contour3d[:, 1], contour3d[:, 2], 'r--', linewidth=2.0, label="Contour (3D)")
-        ax3d.set_title("3D Point Cloud & Contour")
-        ax3d.set_xlabel("X")
-        ax3d.set_ylabel("Y")
-        ax3d.set_zlabel("Z")
-        ax3d.axis("equal")
-        ax3d.legend()
-        ax3d.set_box_aspect([1, 1, 1])
-        ax2d = fig.add_subplot(122)
-    else:
-        ax2d = fig.add_subplot(111)
-
-    # Calculate the area enclosed in the contour
-    area = compute_area(contour2d)
-
-    # Fill the contour in the PCA plan
-    polygon = Polygon(contour2d.tolist(), closed=True, facecolor='red', alpha=0.2, edgecolor='r', linewidth=2.0)
-    ax2d.add_patch(polygon)
-
-    ax2d.plot(contour2d[:, 0], contour2d[:, 1], 'r--', linewidth=2.0, label="Contour (In the PCA Plane)")
-    ax2d.scatter(projected_pts[:, 0], projected_pts[:, 1], c='black', s=1, label="Projected points")
-
-    # Position of the area value text
-    text_x, _ = np.mean(contour2d, axis=0)
-    _, text_y = np.max(contour2d, axis=0)
-    ax2d.text(text_x, text_y, f"Area = {area:.2f} m²", fontsize=14, color='black', ha='center', va='top',
-              bbox=dict(facecolor='white', alpha=0.6))
-
-    ax2d.set_title("Contour in PCA Plane")
-    ax2d.set_xlabel("PC1")
-    ax2d.set_ylabel("PC2")
-    ax2d.legend()
-    ax2d.axis("equal")
-    plt.tight_layout()
-    plt.show()
-
-
 if __name__ == "__main__":
 
     # initializing GUI instance
@@ -209,7 +135,7 @@ if __name__ == "__main__":
 
     # Selecting points in the visualizer
     selected_indices = o3d_visualizer(window_name=point_cloud_name, geom1=point_cloud, save=False)
-    if not selected_indices:
+    if selected_indices is None or not selected_indices:
         print("No points selected. Exiting.")
         sys.exit()
 
@@ -224,11 +150,3 @@ if __name__ == "__main__":
 
     # Selecting point in the cross-section from which the Bounding Box is created
     center_index = o3d_visualizer(window_name=point_cloud_name + ": Cross-section", geom1=cross_section_pc)
-    if not center_index:
-        print("No point selected in cross-section. Exiting.")
-        sys.exit()
-
-# TODO:
-#   Faire plusieurs coupes avec une distance entre les coupes constantes, ou des coupes à placer manuellement.
-#   Documenter toutes les méthodes utilisées. Pourquoi préférer une méthode à une autre ?
-#   Utiliser des class.
