@@ -31,7 +31,7 @@ class PointCloudProcessor:
         self.pick_point = None
         self.cross_section = None
     
-    def visualizer(self, window_name: str, geom: Geometry = None, save: Optional[bool] = None,
+    def visualizer(self, window_name: str, geom1: Geometry = None, geom2: Geometry = None, save: Optional[bool] = None,
                    color_name: str = "white", filename: Union[Path, str,  None] = None) -> Union[np.ndarray, None]:
         """
         Function to visualize the point cloud and select points in the visualizer.
@@ -59,6 +59,15 @@ class PointCloudProcessor:
         save_folder.mkdir(parents=True, exist_ok=True)  # Create the folder if it does not exist
         back_color = background_color.get(color_name.lower(), [1.0, 1.0, 1.0])
 
+        if geom1 and geom2:
+            o3d.visualization.draw_geometries(
+                [geom1, geom2],
+                window_name = window_name,
+                width = 1280,
+                height = 800
+            )
+            return None
+
         # Use VisualizerWithEditing (to allow picking points)
         visualizer = o3d.visualization.VisualizerWithEditing()
         visualizer.create_window(window_name=window_name, width=1280, height=800)
@@ -71,26 +80,26 @@ class PointCloudProcessor:
         print("Press S key to save the selection")
         print("Press F key to enter free-view mode")
 
-        if geom:
-            visualizer.add_geometry(geom)
+        if geom1:
+            visualizer.add_geometry(geom1)
         visualizer.run()
 
         root = Tk()
         root.withdraw()
 
         # Save the point cloud if asked
-        if geom and save:
+        if geom1 and save:
             if not filename:
                 filename = simpledialog.askstring("File Name", "Enter a name for the point cloud (e.g., 'cloud.ply'):")
                 save_path = save_folder / filename
-                o3d.io.write_point_cloud(str(save_path), geom)
+                o3d.io.write_point_cloud(str(save_path), geom1)
                 print(f"Point cloud saved as: {save_path}")
-        elif geom and save is None:
+        elif geom1 and save is None:
             user_choice = messagebox.askyesnocancel("Save Point Cloud", "Do you want to save the point cloud?")
             if user_choice is True:
                 filename = simpledialog.askstring("File Name", "Enter a name for the point cloud (e.g., 'cloud.ply'):")
                 save_path = save_folder / filename
-                o3d.io.write_point_cloud(str(save_path), geom)
+                o3d.io.write_point_cloud(str(save_path), geom1)
                 print(f"Point cloud saved as: {save_path}")
             elif user_choice is False:
                 return None
@@ -143,7 +152,7 @@ if __name__ == "__main__":
     cross_section = PointCloudProcessor(pc=point_cloud)
 
     # Selecting the cut position in the visualizer
-    selected_indices = cross_section.visualizer(window_name=point_cloud_name, geom=point_cloud, save=False)
+    selected_indices = cross_section.visualizer(window_name=point_cloud_name, geom1=point_cloud, save=False)
     print(selected_indices)
     print(len(selected_indices))
     if not selected_indices:
@@ -159,4 +168,4 @@ if __name__ == "__main__":
     cross_section.extract_cross_section(cut_position, thickness)
 
     # Visualizing the cross-section
-    cross_section.visualizer(window_name="Cross-Section", geom=cross_section.cross_section, save=None)
+    cross_section.visualizer(window_name="Cross-Section", geom1=cross_section.cross_section, save=None)
