@@ -6,7 +6,6 @@ import open3d as o3d
 from typing import Tuple, Optional
 from open3d.cpu.pybind.geometry import PointCloud
 from concave_hull import concave_hull
-from process_cloud import display
 from sklearn.decomposition import PCA
 
 logger = logging.getLogger(__name__)
@@ -287,15 +286,51 @@ class ContourExtractor:
             logger.info(f"Perimeter of the contour: {self.perimeter:.4f} m")
 
     def display_contour(self):
-        if self.contour is None:
-            raise ValueError("No contour computed, please compute a contour using the computing methods implemented.")
+        fig = plt.figure(figsize=(8, 8) if self.points_3d is None else (16, 8))
 
-        if isinstance(self.contour, np.ndarray):
-            contour_2d = self.contour
+        # Adding a 3D plot if asked
+        if self.points_3d is not None:
+            ax3d = fig.add_subplot(121, projection='3d')
+            ax3d.scatter(self.points_3d[:, 0], self.points_3d[:, 1], self.points_3d[:, 2], c='black', s=1, alpha=0.6, label="Point cloud")
+            ax3d.set_title("3D Point Cloud & Contour")
+            ax3d.set_xlabel("X")
+            ax3d.set_ylabel("Y")
+            ax3d.set_zlabel("Z")
+            ax3d.axis("equal")
+            ax3d.legend()
+            ax3d.set_box_aspect([1, 1, 1])
+            ax2d = fig.add_subplot(122)
         else:
-            x, y = self.contour.exterior.xy
-            contour_2d = np.column_stack((x, y))
-        display(pts=self.points_3d, contour2d=contour_2d, projected_pts=self.points_2d)
+            ax2d = fig.add_subplot(111)
+        
+        # Calculate the area and perimeter enclosed in the contour
+        self.compute_area()
+        self.compute_perimeter()
+
+        # Fill the contour in the PCA plan
+        polygon = plt.Polygon(self.contour.tolist(), closed=True, facecolor='red', alpha=0.2, edgecolor='r', linewidth=2.0)
+        ax2d.add_patch(polygon)
+
+        ax2d.plot(self.contour[:, 0], self.contour[:, 1], 'r--', linewidth=2.0, label="Contour (In the PCA Plane)")
+        ax2d.scatter(self.projected_points[:, 0], self.projected_points[:, 1], c='black', s=1, label="Projected points")
+
+        # Position of the area value text
+        text_x, _ = np.mean(self.contour, axis=0)
+        _, text_y = np.max(self.contour, axis=0)
+        ax2d.text(text_x + 2.0, text_y + 2.0, f"Area = {self.area:.2f} m²", fontsize=14, color='black', ha='center', va='top',
+                  bbox=dict(facecolor='white', alpha=0.6))
+        
+        # Position of the perimeter value text
+        ax2d.text(text_x + 2.0, text_y + 3.5, f"Perimeter = {self.perimeter:.2f} m", fontsize=14, color='black', ha='center', va='top',
+                  bbox=dict(facecolor='white', alpha=0.6))
+        
+        ax2d.set_title("Contour in PCA Plane")
+        ax2d.set_xlabel("PC1")
+        ax2d.set_ylabel("PC2")
+        ax2d.legend()
+        ax2d.axis("equal")
+        plt.tight_layout()
+        plt.show()
 
     def extract(self, method: str = 'concave', alpha: Optional[float] = 3.5, concavity: Optional[float] = None,
                 length_threshold: Optional[float] = None):
@@ -315,10 +350,10 @@ class ContourExtractor:
 
 
 if __name__ == "__main__":
-    cloud_name = "cross_section_3_45d_clean.ply"
+    cloud_name = "cross_section_2_clean.ply"
     cloud_location = "saved_clouds"
 
-    voxel_size = 0.01
+    voxel_size = 0.1
     method = 'concave'
 
     alpha = 3.5
@@ -333,5 +368,3 @@ if __name__ == "__main__":
     cloud.downsample(voxel_size=voxel_size)
     cloud.pca_projection(diagnosis=diagnose, visualize=visualize)
     cloud.extract(method=method, alpha=alpha, concavity=concavity, length_threshold=length_threshold)
-    cloud.compute_area()
-    cloud.compute_perimeter()
