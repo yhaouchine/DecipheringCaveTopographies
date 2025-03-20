@@ -10,6 +10,10 @@ from typing import Tuple, Optional, List
 
 class Ellipsoid(object):
     def __init__(self, pc: PointCloud, selected_i: Optional[List[int]] = None, resolution: int = 15):
+        """
+        Contructor of the Ellipsoid class.
+        """
+
         self.resolution = resolution
         self.pc = pc
         self.filtered_pc = None
@@ -21,7 +25,23 @@ class Ellipsoid(object):
         self.line_set = None
         self.l_axes = None
     
-    def create(self):
+    def create(self) -> Tuple[o3d.geometry.LineSet, np.ndarray, list[float]]:
+        """
+        Function to create a wireframed ellipsoid, either by considering the c-axis (vertical axis) 
+        of the ellipsoid as defined between two points selected bu the user. Or by defining the center of the
+        ellispoid as the unique point selected by the user, and the length of the axes as determined bu the user.
+
+        Returns:
+        --------
+        line_set: open3d.geometry.LineSet
+            The wireframed ellispoid.
+
+        center_point: np.ndarray
+            The center of the ellipsoid.
+
+        l_axes: list[float] 
+            A list containing the lengths of the ellipsoid axes.
+        """
         if self.selected_i is None:
             raise ValueError("selected_i cannot be None.")
         elif len(self.selected_i) == 2:
@@ -62,7 +82,15 @@ class Ellipsoid(object):
 
         return self.line_set, self.center_point, self.l_axes
     
-    def filter_points(self):
+    def filter_points(self) -> PointCloud:
+        """
+        Function to filter out the points located withing the ellipsoid.
+
+        Returns:
+        --------
+        filtered_pc: PointCloud
+            The cleaned point cloud.
+        """
         points = np.asarray(self.pc.points)
         relative_position = points - self.center_point
         normalized_distance = (

@@ -37,7 +37,7 @@ class PointCloudProcessor:
         Function to visualize the point cloud and select points in the visualizer.
 
         Parameters:
-        ----------
+        -----------
         window_name: str
             Name of the window
         geom: open3d.geometry.Geometry
@@ -50,7 +50,7 @@ class PointCloudProcessor:
             Name of the file to save the point cloud
         
         Returns:
-        -------
+        --------
         pick_point: np.ndarray
             Array of the picked points
         """
@@ -114,7 +114,7 @@ class PointCloudProcessor:
         If multiple points are selected in the vizualizer, extract as manu cross-sections.
         
         Parameters:
-        ----------
+        -----------
         cut_position: np.ndarray
             Position of the cross-section
 
@@ -122,7 +122,7 @@ class PointCloudProcessor:
             Thickness of the cross-section
             
         Returns:
-        -------
+        --------
         cross_section: open3d.geometry.PointCloud
             Point cloud of the cross-section
         """

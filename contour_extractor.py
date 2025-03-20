@@ -59,7 +59,7 @@ class ContourExtractor:
         Downsample the point cloud using voxel grid downsampling.
 
         Parameters:
-        ----------
+        -----------
         voxel_size : float, optional (default=None)
             The size of the voxel grid used for downsampling.  
         """
@@ -83,14 +83,14 @@ class ContourExtractor:
         Project the 3D points onto a 2D plane using Principal Component Analysis (PCA).
         
         Parameters:
-        ----------
+        -----------
         diagnosis : bool, optional (default=False)
             Whether to display the PCA diagnosis plot.
         visualize : bool, optional (default=False)
             Whether to display the 2D projection of the point cloud.
 
         Returns:
-        -------
+        --------
         A NumPy array of shape (n, 2) containing the 2D coordinates of the projected points.
         """
 
@@ -118,7 +118,7 @@ class ContourExtractor:
         Display a diagnosis of the Principal Component Analysis (PCA) results.
         
         Parameters:
-        ----------
+        -----------
         pca : PCA
             The PCA object fitted on the centered point cloud.
         """
@@ -149,7 +149,7 @@ class ContourExtractor:
         Display a 3D and 2D visualization of the point cloud and its principal components.
 
         Parameters:
-        ----------
+        -----------
         pca : PCA
             The PCA object fitted on the centered point cloud.
         """
@@ -220,13 +220,13 @@ class ContourExtractor:
         Compute the alpha shape (concave hull) of a set of 2D points.
 
         Parameters:
-        ----------
+        -----------
         alpha : float
             Controls the level of concavity (lower values = more concave, higher values = more convex).
             If `alpha` is too small, the shape may be disconnected or disappear.
         
         Returns:
-        -------
+        --------
         A tuple containing:
             - The computed alpha shape as a `Polygon`, `MultiPolygon`, or `None` (if the computation fails).
             - The time taken to compute the shape (in seconds).        
@@ -264,17 +264,17 @@ class ContourExtractor:
             of detail of the resulting hull
             
             Parameters:
-            ----------
-            concavity : float, optional (default=1.0)
+            -----------
+            concavity: float, optional (default=1.0)
                 The concavity coefficient controlling the level of detail of the hull:
-                - Lower values yield a more detailed, concave shape.
-                - Higher values yield a smoother, more convex shape.
-            length threshold (length_threshold) : float, optional (default=0.0)
+                    - Lower values yield a more detailed, concave shape.
+                    - Higher values yield a smoother, more convex shape.
+            length threshold (length_threshold): float, optional (default=0.0)
                 The minimum edge length below which segments are ignored during the hull construction,
                 which helps filter out edges caused by noise.
 
             Returns:
-            -------
+            --------
             A tuple containing:
                 - hull: A NumPy array of shape (m, 2) of the ordered vertices of the concave hull polygon.
                 - time: A float representing the computation time in seconds.
@@ -386,7 +386,7 @@ class ContourExtractor:
         Extract the contour of the point cloud using either the convex or concave hull method.
         
         Parameters:
-        ----------
+        -----------
         method : str, optional (default='concave')
             The method used to extract the contour. Choose between 'convex' or 'concave'.
 
