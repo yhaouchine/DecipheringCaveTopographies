@@ -73,6 +73,7 @@ class Cuboid(Shape):
         self.nb_points = nb_points
         self.real_area = None
         self.real_perimeter = None
+        self.parallelogram_pc = None
         self.generate()
         self.pc = self.to_point_cloud()
     
@@ -84,12 +85,19 @@ class Cuboid(Shape):
         y = np.random.uniform(y_min, y_max, self.nb_points)
         z = np.random.uniform(z_min, z_max, self.nb_points)
 
-        choice = np.random.choice([0, 1, 2], size=self.nb_points)
-        x[choice == 0] = np.random.choice([x_min, x_max], size=np.sum(choice == 0))
-        y[choice == 1] = np.random.choice([y_min, y_max], size=np.sum(choice == 1))
-        z[choice == 2] = np.random.choice([z_min, z_max], size=np.sum(choice == 2))
-
         self.points = np.column_stack((x, y, z))
+
+    def extract_section(self):
+        z_level = 0
+        tolerance = 0.01
+        parallelogram_points = self.points[np.abs(self.points[:, 2] - z_level) < tolerance]
+        
+        # Create a new point cloud for the section
+        self.parallelogram_pc = o3d.geometry.PointCloud()
+        self.parallelogram_pc.points = o3d.utility.Vector3dVector(parallelogram_points)
+        self.parallelogram_pc.colors = o3d.utility.Vector3dVector(np.tile(self.color, (len(parallelogram_points), 1)))
+        
+        return self.parallelogram_pc
 
 class Pyramid(Shape):
     def __init__(self, nb_points, base_size=4, height=5, center=(0, 0, 0), color=(0, 1, 0)):
@@ -145,9 +153,9 @@ if __name__ == "__main__":
         save_folder = Path("test_shapes")
         save_folder.mkdir(parents=True, exist_ok=True)
 
-        sphere_instance = Sphere(radius=1, nb_points=n_points, color=(0, 0, 1))
+        #sphere_instance = Sphere(radius=1, nb_points=n_points, color=(0, 0, 1))
         cuboid_instance = Cuboid(nb_points=n_points, min_corner=(-2, -1, -1), max_corner=(2, 1, 1), color=(1, 0, 0))
-        pyramid_instance = Pyramid(nb_points=n_points, base_size=4, height=5, center=(5, 5, 0), color=(0, 1, 0))
+        #pyramid_instance = Pyramid(nb_points=n_points, base_size=4, height=5, center=(5, 5, 0), color=(0, 1, 0))
 
         # # Saving files
         # try:
@@ -162,8 +170,12 @@ if __name__ == "__main__":
         # disk_processor = PointCloudProcessor(sphere_instance.pc)
         # disk_processor.visualizer(window_name="Disk", geom1=disk_pc, save=False)
 
+        parallelogram_pc = cuboid_instance.extract_section()
+        parallelogram_processor = PointCloudProcessor(cuboid_instance.pc)
+        parallelogram_processor.visualizer(window_name="Parallelogram", geom1=parallelogram_pc, save=False)
+
         cloud = ContourExtractor()
-        cloud.load_cloud(pc_name="circle.ply", parent_folder=save_folder)
+        cloud.load_cloud(pc_name="parallelogram.ply", parent_folder=save_folder)
         cloud.downsample(voxel_size=0.01)
         cloud.pca_projection()
         cloud.extract(concavity=1.0, length_threshold=0.2)
