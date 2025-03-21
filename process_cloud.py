@@ -20,17 +20,33 @@ background_color = {
 }
 
 class PointCloudProcessor:
-    def __init__(self, pc: PointCloud, position: Optional[np.ndarray] = None, thickness: Optional[float] = None):
+    def __init__(self, pc: Optional[PointCloud] = None, position: Optional[np.ndarray] = None, thickness: Optional[float] = None):
         """
-        Constructor of the CrossSection class.
+        Constructor of the PointCloudProcessor class.
         """
 
         self.pc = pc
+        self.pc_name = None
+        self.parent_folder = None
         self.position = position
         self.thickness = thickness
         self.pick_point = None
         self.cross_section = None
-    
+        self.points_3d = None
+
+
+    def load_cloud(self, pc_name: str, parent_folder: str):
+        """
+        Load a point cloud from a file using Open3D point cloud reading function.        
+        """
+
+        self.pc_name = pc_name
+        self.parent_folder = parent_folder
+        self.pc = o3d.io.read_point_cloud(f"{self.parent_folder}/{self.pc_name}")
+        self.points_3d = np.asarray(self.pc.points)
+
+        return self.pc
+
     def visualizer(self, window_name: str, geom1: Geometry = None, geom2: Geometry = None, save: Optional[bool] = None,
                    color_name: str = "white", filename: Union[Path, str,  None] = None) -> Union[np.ndarray, None]:
         """
@@ -40,8 +56,10 @@ class PointCloudProcessor:
         -----------
         window_name: str
             Name of the window
-        geom: open3d.geometry.Geometry
-            Geometry to visualize
+        geom1: open3d.geometry.Geometry
+            First geometry to visualize
+        geom2: open3d.geometry.Geometry
+            Second geometry to visualize (optional)
         save: bool
             If True, the point cloud is saved
         color_name: str
@@ -108,16 +126,13 @@ class PointCloudProcessor:
 
         return self.pick_point
     
-    def extract_cross_section(self, cut_position: np.ndarray, thickness: float) -> PointCloud:
+    def extract_cross_section(self, thickness: float) -> PointCloud:
         """
         Function to extract a cross-section of the point cloud located at the picked point in the visualizer.
-        If multiple points are selected in the vizualizer, extract as manu cross-sections.
+        If multiple points are selected in the visualizer, extract as many cross-sections.
         
         Parameters:
         -----------
-        cut_position: np.ndarray
-            Position of the cross-section
-
         thickness: float
             Thickness of the cross-section
             
@@ -127,16 +142,22 @@ class PointCloudProcessor:
             Point cloud of the cross-section
         """
 
+        selected_indices = self.visualizer(window_name="Select cut position", geom1=self.pc, save=False)
+        if not selected_indices:
+            sys.exit("No points selected.")
+
+        selected_points = self.pc.select_by_index(selected_indices)
+        selected_points_coordinates = np.asarray(selected_points.points)
+        cut_positions = selected_points_coordinates[0][0]
+
         points = np.asarray(self.pc.points)
-        mask = (points[:, 0] > cut_position - thickness / 2) & (points[:, 0] < cut_position + thickness / 2)
+        mask = (points[:, 0] > cut_positions - thickness / 2) & (points[:, 0] < cut_positions + thickness / 2)
         cut_points = points[mask]
         cut_point_cloud = o3d.geometry.PointCloud()
         cut_point_cloud.points = o3d.utility.Vector3dVector(cut_points)
         self.cross_section = cut_point_cloud
 
         return self.cross_section
-
-
 
 
 if __name__ == "__main__":
@@ -146,26 +167,14 @@ if __name__ == "__main__":
 
     # Importing the point cloud
     point_cloud_name = "cave_res_1cm.ply"
-    point_cloud = o3d.io.read_point_cloud("point_clouds/" + point_cloud_name)
+    parent_folder = "point_clouds"
 
-    # Creating the cross-section object
-    cross_section = PointCloudProcessor(pc=point_cloud)
-
-    # Selecting the cut position in the visualizer
-    selected_indices = cross_section.visualizer(window_name=point_cloud_name, geom1=point_cloud, save=False)
-    print(selected_indices)
-    print(len(selected_indices))
-    if not selected_indices:
-        sys.exit("No points selected.")
-    
-
-    selected_point = point_cloud.select_by_index(selected_indices)
-    selected_point_coordinates = np.asarray(selected_point.points)
-    cut_position = selected_point_coordinates[0][0]
+    pcp_instance = PointCloudProcessor()
+    point_cloud = pcp_instance.load_cloud(pc_name=point_cloud_name, parent_folder=parent_folder)
 
     # Extracting the cross-section
     thickness = 0.1
-    cross_section.extract_cross_section(cut_position, thickness)
+    cross_section = pcp_instance.extract_cross_section(thickness)
 
     # Visualizing the cross-section
-    cross_section.visualizer(window_name="Cross-Section", geom1=cross_section.cross_section, save=None)
+    pcp_instance.visualizer(window_name="Cross-Section", geom1=cross_section, save=None)
