@@ -58,32 +58,31 @@ class Shape:
         o3d.io.write_point_cloud(filename, self.pc)
 
 class Sphere(Shape):
-    class Sphere:
-        """
-        A class representing a 3D sphere shape, inheriting from the Shape class.
+    """
+    A class representing a 3D sphere shape, inheriting from the Shape class.
 
-        Attributes:
-        -----------
-            - radius (float): The radius of the sphere.
-            - nb_points (int): The number of points to generate for the sphere.
-            - color (tuple): The RGB color of the sphere, default is blue (0, 0, 1).
-            - center (tuple): The center of the sphere, default is (0, 0, 0).
-            - disk_area (float): The area of the disk at the center of the sphere.
-            - disk_perimeter (float): The perimeter of the disk at the center of the sphere.
-            - disk_pc (o3d.geometry.PointCloud or None): The point cloud representing the disk, if extracted.
-            - points (numpy.ndarray): The generated points representing the sphere.
-            - pc (o3d.geometry.PointCloud): The point cloud representation of the sphere.
+    Attributes:
+    -----------
+        - radius (float): The radius of the sphere.
+        - nb_points (int): The number of points to generate for the sphere.
+        - color (tuple): The RGB color of the sphere, default is blue (0, 0, 1).
+        - center (tuple): The center of the sphere, default is (0, 0, 0).
+        - disk_area (float): The area of the disk at the center of the sphere.
+        - disk_perimeter (float): The perimeter of the disk at the center of the sphere.
+        - disk_pc (o3d.geometry.PointCloud or None): The point cloud representing the disk, if extracted.
+        - points (numpy.ndarray): The generated points representing the sphere.
+        - pc (o3d.geometry.PointCloud): The point cloud representation of the sphere.
 
-        Methods:
-        --------
-            __init__(radius, nb_points, color=(0, 0, 1)):
-                Initializes the Sphere object with the given radius, number of points, and color.
+    Methods:
+    --------
+        __init__(radius, nb_points, color=(0, 0, 1)):
+            Initializes the Sphere object with the given radius, number of points, and color.
 
-            generate():
-                Generates the points representing the sphere using a uniform distribution in volume.
+        generate():
+            Generates the points representing the sphere using a uniform distribution in volume.
 
-            extract_disk():
-                Extracts points close to the z=0 plane (disk) within a given tolerance and creates a point cloud.
+        extract_disk():
+            Extracts points close to the z=0 plane (disk) within a given tolerance and creates a point cloud.
         """
     def __init__(self, radius, nb_points, color=(0, 0, 1)):
         super().__init__(nb_points, color)

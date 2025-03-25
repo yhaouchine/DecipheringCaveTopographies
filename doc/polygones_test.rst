@@ -1,5 +1,5 @@
 polygones_test
-=============
+==============
 
 .. automodule:: polygones_test
     :members:
