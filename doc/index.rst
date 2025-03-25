@@ -11,8 +11,8 @@ Welcome to DecipheringCaveTopographies's documentation!
    :caption: Contents:
 
    process_cloud
-
-
+   clean_cloud
+   contour_extractor
 
 Indices and tables
 ==================

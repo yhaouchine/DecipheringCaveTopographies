@@ -7,6 +7,7 @@ __pycache__/
 point_clouds/
 saved_clouds/
 images/
+test_shapes/
 /doc/_build/
 /doc/_static/
 /doc/_templates/
