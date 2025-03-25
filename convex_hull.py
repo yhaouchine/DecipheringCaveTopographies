@@ -1,10 +1,10 @@
 import numpy as np
 import alphashape
 from process_cloud import import_cloud, display, pca_projection
-from typing import Tuple
+from typing import Tuple, Union
 
 
-def calculate_alpha_shape(alpha: float, pts: list | np.ndarray) -> Tuple[any, float]:
+def calculate_alpha_shape(alpha: float, pts: Union[list, np.ndarray]) -> Tuple[any, float]:
     """
     Compute the alpha shape (concave hull) of a set of 2D points.
 
