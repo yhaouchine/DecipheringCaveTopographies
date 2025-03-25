@@ -13,6 +13,7 @@ Welcome to DecipheringCaveTopographies's documentation!
    process_cloud
    clean_cloud
    contour_extractor
+   polygones_test
 
 Indices and tables
 ==================

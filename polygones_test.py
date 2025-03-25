@@ -8,6 +8,34 @@ from typing import Tuple
 
 
 class Shape:
+    """
+    The `Shape` class represents a geometric shape with a specified number of points and a default color. 
+    It provides methods to generate the shape, convert it to a point cloud, and save it as a PLY file.
+
+    Attributes:
+    -----------
+        - nb_points (int): Stores the number of points.
+        - color (tuple): Stores the color as an RGB tuple.
+        - pc (NoneType): Placeholder attribute, initialized to None.
+        - points (list): List to store point data.
+        - x (list): List to store x-coordinates of points.
+        - y (list): List to store y-coordinates of points.
+
+    Methods:
+    --------
+        __init__(nb_points, default_color=(0, 0, 0)):
+            Initializes a new instance of the `Shape` class with the specified number of points and default color.
+       
+        generate():
+            Placeholder method for generating the shape. To be implemented.
+       
+        to_point_cloud():
+            Converts the shape's points into an Open3D PointCloud object and assigns colors to the points.
+        
+        save_ply(filename):
+            Saves the shape's point cloud to a PLY file with the specified filename.
+            
+    """
     def __init__(self, nb_points, default_color=(0, 0, 0)):
         self.nb_points = nb_points
         self.color = default_color
@@ -30,6 +58,33 @@ class Shape:
         o3d.io.write_point_cloud(filename, self.pc)
 
 class Sphere(Shape):
+    class Sphere:
+        """
+        A class representing a 3D sphere shape, inheriting from the Shape class.
+
+        Attributes:
+        -----------
+            - radius (float): The radius of the sphere.
+            - nb_points (int): The number of points to generate for the sphere.
+            - color (tuple): The RGB color of the sphere, default is blue (0, 0, 1).
+            - center (tuple): The center of the sphere, default is (0, 0, 0).
+            - disk_area (float): The area of the disk at the center of the sphere.
+            - disk_perimeter (float): The perimeter of the disk at the center of the sphere.
+            - disk_pc (o3d.geometry.PointCloud or None): The point cloud representing the disk, if extracted.
+            - points (numpy.ndarray): The generated points representing the sphere.
+            - pc (o3d.geometry.PointCloud): The point cloud representation of the sphere.
+
+        Methods:
+        --------
+            __init__(radius, nb_points, color=(0, 0, 1)):
+                Initializes the Sphere object with the given radius, number of points, and color.
+
+            generate():
+                Generates the points representing the sphere using a uniform distribution in volume.
+
+            extract_disk():
+                Extracts points close to the z=0 plane (disk) within a given tolerance and creates a point cloud.
+        """
     def __init__(self, radius, nb_points, color=(0, 0, 1)):
         super().__init__(nb_points, color)
         self.nb_points = nb_points
@@ -60,6 +115,7 @@ class Sphere(Shape):
     def extract_disk(self, tolerance=0.01):
         # Extract points close to the center of the sphere (z = 0)
         z_level = 0
+        tolerance = 0.01
         disk_points = self.points[np.abs(self.points[:, 2] - z_level) < tolerance]
         
         # Create a new point cloud for the disk
@@ -70,6 +126,30 @@ class Sphere(Shape):
         return self.disk_pc
 
 class Cuboid(Shape):
+    """
+    A class representing a 3D cuboid shape, inheriting from the Shape class.
+    
+    Attributes:
+    -----------
+        - lengths (numpy.ndarray): The dimensions of the cuboid (length, width, height).
+        - center (numpy.ndarray): The center coordinates of the cuboid.
+        - nb_points (int): The number of points to generate for the cuboid's point cloud.
+        - rectangle_area (float): The area of the rectangle formed by the cuboid's base.
+        - rectangle_perimeter (float): The perimeter of the rectangle formed by the cuboid's base.
+        - rectangle_pc (open3d.geometry.PointCloud or None): The point cloud of the extracted rectangle section.
+        - pc (numpy.ndarray): The generated point cloud of the cuboid.
+    
+    Methods:
+    --------
+        __init__(nb_points, lengths=(4, 2, 3), center=(0, 0, 0), color=(1, 0, 0)):
+            Initializes the Cuboid object with the specified parameters and generates its point cloud.
+
+        generate():
+            Generates the 3D point cloud for the cuboid based on its dimensions, center, and number of points.
+
+        extract_section():
+            Extracts a 2D rectangular section of the cuboid at a specific z-level and returns it as a point cloud.
+    """
     def __init__(self, nb_points, lengths=(4, 2, 3), center=(0, 0, 0), color=(1, 0, 0)):
         super().__init__(nb_points, color)
         self.lengths = np.array(lengths)
@@ -110,6 +190,33 @@ class Cuboid(Shape):
         return self.rectangle_pc
 
 class Pyramid(Shape):
+    """
+    A class representing a 3D pyramid shape with a square base, capable of generating
+    random points within its volume and extracting cross-sectional point clouds.
+
+    Attributes:
+    -----------
+        - base_size (float): The length of one side of the square base of the pyramid.
+        - height (float): The height of the pyramid from the base to the apex.
+        - nb_points (int): The number of random points to generate within the pyramid.
+        - real_area (float): The calculated area of one triangular face of the pyramid.
+        - real_perimeter (float): The calculated perimeter of one triangular face of the pyramid.
+        - center (numpy.ndarray): The 3D coordinates of the center of the pyramid's base.
+        - triangle_pc (open3d.geometry.PointCloud): The point cloud of a cross-sectional slice of the pyramid.
+        - pc (numpy.ndarray): The point cloud of all generated points within the pyramid.
+        - points (numpy.ndarray): The array of generated random points within the pyramid.
+    
+    Methods:
+    --------
+        __init__(nb_points, base_size=4, height=5, center=(0, 0, 0), color=(0, 1, 0)):
+            Initializes the Pyramid object with the given parameters and generates points.
+
+        generate():
+            Generates random points within the pyramid's volume.
+
+        extract_section():
+            Extracts a cross-sectional point cloud of the pyramid at a specified x-coordinate level.
+    """
     def __init__(self, nb_points, base_size=4, height=5, center=(0, 0, 0), color=(0, 1, 0)):
         super().__init__(nb_points, color)
         self.base_size = base_size
@@ -179,6 +286,25 @@ def generate_save_clouds(
     c: bool = True,
     p: bool = True
     ) -> Tuple[Sphere, Cuboid, Pyramid]:
+
+    """
+    Generates 3D point clouds for a sphere, cuboid, and pyramid, and optionally saves them as PLY files.
+
+    Args:
+    -----
+        - num_points (int): The number of points to generate for each shape.
+        - sphere_radius (float): The radius of the sphere.
+        - save_folder (str): The folder path where the PLY files will be saved if `save` is True.
+        - save (bool, optional): Whether to save the generated shapes as PLY files. Defaults to False.
+        - s (bool, optional): Whether to generate the sphere. Defaults to True.
+        - c (bool, optional): Whether to generate the cuboid. Defaults to True.
+        - p (bool, optional): Whether to generate the pyramid. Defaults to True.
+
+    Returns:
+    --------
+        Tuple[Sphere, Cuboid, Pyramid]: A tuple containing the generated Sphere, Cuboid, and Pyramid instances.
+                                         If a shape is not generated, its corresponding value in the tuple will be None.
+    """
     
     # Generating shapes
     sphere_instance = Sphere(radius=sphere_radius, nb_points=num_points, color=(0, 0, 1)) if s else None
