@@ -54,14 +54,24 @@ class ContourExtractor:
             logger.error(f"An error occurred while loading the point cloud: {e}")
             raise
 
-    def downsample(self, voxel_size: Optional[float] = None):
+    def downsample(self, voxel_size: float):
         """
-        Downsample the point cloud using voxel grid downsampling.
+        Downsample the point cloud using voxel grid downsampling. 
+
+        The 3D space containing the point cloud is divided into a grid of equally sized voxels. 
+        The size of the voxels is determined by the voxel_size parameter.
+        
+        Each point in the point cloud is assigned to a voxel based on its coordinates. This is 
+        done by determining which voxel the point falls into.
+        
+        For each voxel that contains one or more points, a single representative point is chosen by compute 
+        the average (mean) position of all points in the voxel and use it as the representative point.
 
         Parameters:
         -----------
-        voxel_size : float, optional (default=None)
-            The size of the voxel grid used for downsampling.  
+            - voxel_size: float
+                The size of the voxel grid used for downsampling. The unit 
+                correspond to the unit of the point cloud coordinates. 
         """
 
         try:
@@ -84,10 +94,10 @@ class ContourExtractor:
         
         Parameters:
         -----------
-        diagnosis : bool, optional (default=False)
-            Whether to display the PCA diagnosis plot.
-        visualize : bool, optional (default=False)
-            Whether to display the 2D projection of the point cloud.
+            - diagnosis: bool, optional (default=False)
+                Whether to display the PCA diagnosis plot.
+            - visualize: bool, optional (default=False)
+                Whether to display the 2D projection of the point cloud.
 
         Returns:
         --------
@@ -119,8 +129,8 @@ class ContourExtractor:
         
         Parameters:
         -----------
-        pca : PCA
-            The PCA object fitted on the centered point cloud.
+            - pca: PCA
+                The PCA object fitted on the centered point cloud.
         """
 
         self.logger.info("==================== PCA Diagnosis ====================")
@@ -150,7 +160,7 @@ class ContourExtractor:
 
         Parameters:
         -----------
-        pca : PCA
+        pca: PCA
             The PCA object fitted on the centered point cloud.
         """
 
@@ -217,19 +227,19 @@ class ContourExtractor:
 
     def convex_hull(self, alpha: float) -> Tuple[any, float]:
         """
-        Compute the alpha shape (concave hull) of a set of 2D points.
-
+        Compute the alpha shape (convex hull) of a set of 2D points.
+        # TODO : check the documentations/function
         Parameters:
         -----------
-        alpha : float
-            Controls the level of concavity (lower values = more concave, higher values = more convex).
-            If `alpha` is too small, the shape may be disconnected or disappear.
+            - alpha: float
+                Controls the level of concavity (lower values = more concave, higher values = more convex).
+                If `alpha` is too small, the shape may be disconnected or disappear.
         
         Returns:
         --------
-        A tuple containing:
-            - The computed alpha shape as a `Polygon`, `MultiPolygon`, or `None` (if the computation fails).
-            - The time taken to compute the shape (in seconds).        
+            - A tuple containing:
+                - The computed alpha shape as a `Polygon`, `MultiPolygon`, or `None` (if the computation fails).
+                - The time taken to compute the shape (in seconds).
         """
 
         import time
@@ -249,10 +259,10 @@ class ContourExtractor:
             logger.error(f"An error occurred while computing the convex hull: {e}")
             raise
 
-    def concave_hull(self, c: float = 1.0, length_threshold: float = 0.0) -> Tuple[np.ndarray, float]:
+    def concave_hull(self, length_threshold: float, c: float) -> Tuple[np.ndarray, float]:
         """
-            Compute the concave hull for a set of 2D points using a K-Nearest Neighbors (KNN)
-            approach based on the Concaveman algorithm.
+            Compute the concave hull for a set of 2D points using a K-Nearest Neighbors (KNN) approach. 
+            (See https://github.com/cubao/concave_hull) 
 
             The concave hull is a polygon that more accurately follows the natural boundary of a point cloud
             than the convex hull. Unlike the convex hull, which is the smallest convex polygon that encloses all
@@ -265,19 +275,19 @@ class ContourExtractor:
             
             Parameters:
             -----------
-            concavity: float, optional (default=1.0)
-                The concavity coefficient controlling the level of detail of the hull:
-                    - Lower values yield a more detailed, concave shape.
-                    - Higher values yield a smoother, more convex shape.
-            length threshold (length_threshold): float, optional (default=0.0)
-                The minimum edge length below which segments are ignored during the hull construction,
-                which helps filter out edges caused by noise.
+                - concavity: float, optional (default=1.0)
+                    The concavity coefficient controlling the level of detail of the hull:
+                        - Values <= 1 yield a more detailed, concave shape. 
+                        - Values > 1 yield a smoother, more convex shape.
+                - length threshold (length_threshold): float, optional (default=0.0)
+                    The minimum edge length below which segments are ignored during the hull construction,
+                    which helps filter out edges caused by noise. The unit depends on the unit of the point cloud coordinates.
 
             Returns:
             --------
-            A tuple containing:
-                - hull: A NumPy array of shape (m, 2) of the ordered vertices of the concave hull polygon.
-                - time: A float representing the computation time in seconds.
+                - A tuple containing:
+                    - hull: A NumPy array of shape (m, 2) of the ordered vertices of the concave hull polygon.
+                    - time: A float representing the computation time in seconds.
         """
 
         import time
@@ -303,18 +313,17 @@ class ContourExtractor:
         whose vertices are described by their Cartesian coordinates in the plane.
 
         The equation is provided as follows:
-        Area = 0.5 * |(x0y1 + x1y2 + ... + xn-1yn + xny0) - (y0x1 + y1x2 + ... + yn-1xn + ynx0)|
+        Area = 0.5 * |(x0 * y1 + x1 * y2 + ... + xn-1 * yn + xn * y0) - (y0 * x1 + y1 * x2 + ... + yn-1 * xn + yn * x0)|
         """
 
         if self.contour is None:
             raise ValueError("No contour computed, please compute a contour first.")
         else:
-            logger.info("")
             logger.info("===== Computing area... =====")
             x, y = self.contour[:, 0], self.contour[:, 1]
             self.area = 0.5 * np.abs(np.sum(x[:-1] * y[1:] - x[1:] * y[:-1]) + (x[-1] * y[0] - x[0] * y[-1]))
             logger.info(f"Area of the contour: {self.area:.4f} m²")
-    
+
     def compute_perimeter(self):
         """
         Compute the perimeter of the contour by summing the Euclidean distances between consecutive points.
@@ -339,7 +348,8 @@ class ContourExtractor:
         # Adding a 3D plot if asked
         if self.points_3d is not None:
             ax3d = fig.add_subplot(121, projection='3d')
-            ax3d.scatter(self.points_3d[:, 0], self.points_3d[:, 1], self.points_3d[:, 2], c='black', s=1, alpha=0.6, label="Point cloud")
+            ax3d.scatter(self.points_3d[:, 0], self.points_3d[:, 1], self.points_3d[:, 2], c='black', s=1, alpha=0.6,
+                         label="Point cloud")
             ax3d.set_title("3D Point Cloud & Contour")
             ax3d.set_xlabel("X")
             ax3d.set_ylabel("Y")
@@ -350,58 +360,59 @@ class ContourExtractor:
             ax2d = fig.add_subplot(122)
         else:
             ax2d = fig.add_subplot(111)
-        
+
         # Calculate the area and perimeter enclosed in the contour
         self.compute_area()
         self.compute_perimeter()
 
         # Fill the contour in the PCA plan
-        polygon = plt.Polygon(self.contour.tolist(), closed=True, facecolor='red', alpha=0.2, edgecolor='r', linewidth=2.0)
+        polygon = plt.Polygon(self.contour.tolist(), closed=True, facecolor='red', alpha=0.2, edgecolor='r',
+                              linewidth=2.0)
         ax2d.add_patch(polygon)
 
         ax2d.plot(self.contour[:, 0], self.contour[:, 1], 'r--', linewidth=2.0, label="Contour (In the PCA Plane)")
         ax2d.scatter(self.projected_points[:, 0], self.projected_points[:, 1], c='black', s=1, label="Projected points")
 
-        # Position of the area value text
-        text_x, _ = np.mean(self.contour, axis=0)
-        _, text_y = np.max(self.contour, axis=0)
-        ax2d.text(text_x + 2.0, text_y + 2.0, f"Area = {self.area:.2f} m²", fontsize=14, color='black', ha='center', va='top',
-                  bbox=dict(facecolor='white', alpha=0.6))
-        
-        # Position of the perimeter value text
-        ax2d.text(text_x + 2.0, text_y + 3.5, f"Perimeter = {self.perimeter:.2f} m", fontsize=14, color='black', ha='center', va='top',
-                  bbox=dict(facecolor='white', alpha=0.6))
-        
+        # Add area and perimeter to the legend
+        area_label = f"Area = {self.area:.4f} m²"
+        perimeter_label = f"Perimeter = {self.perimeter:.4f} m"
+        ax2d.plot([], [], ' ', label=area_label)
+        ax2d.plot([], [], ' ', label=perimeter_label)
+
         ax2d.set_title("Contour in PCA Plane")
         ax2d.set_xlabel("PC1")
         ax2d.set_ylabel("PC2")
-        ax2d.legend()
+        ax2d.legend(loc='upper right')  # Move the legend to the top right corner
         ax2d.axis("equal")
         plt.tight_layout()
         plt.show()
 
-    def extract(self, method: str = 'concave', alpha: Optional[float] = 3.5, concavity: Optional[float] = None,
+    def extract(self, method: str, alpha: Optional[float] = None, concavity: Optional[float] = None,
                 length_threshold: Optional[float] = None):
         """
         Extract the contour of the point cloud using either the convex or concave hull method.
-        
+
+        # TODO: Update function (length threshold). Concavity could be mandatory too.
+
         Parameters:
         -----------
-        method : str, optional (default='concave')
-            The method used to extract the contour. Choose between 'convex' or 'concave'.
+            - method : str, optional (default='concave')
+                The method used to extract the contour. Choose between 'convex' or 'concave'.
 
-        alpha : float, optional (default=3.5)
-            The alpha parameter controlling the level of concavity in the convex hull method.
+            - alpha : float, optional (default=3.5)
+                The alpha parameter controlling the level of concavity in the convex hull method.
 
-        concavity : float, optional (default=None)
-            The concavity coefficient controlling the level of detail of the hull in the concave hull method.
-            
-        length_threshold : float, optional (default=None)
-            The minimum edge length below which segments are ignored during the hull construction,
-            which helps filter out edges caused by noise.
+            - concavity : float, optional (default=None)
+                The concavity coefficient controlling the level of detail of the hull in the concave hull method.
+                
+            - length_threshold : float, optional (default=None)
+                The minimum edge length below which segments are ignored during the hull construction,
+                which helps filter out edges caused by noise.
         """
 
         if method == 'convex':
+            if alpha is None:
+                raise ValueError("Alpha parameter must be provided for convex method.")
             self.convex_hull(alpha=alpha)
         elif method == 'concave':
             if concavity is None or length_threshold is None:

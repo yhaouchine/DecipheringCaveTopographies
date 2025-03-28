@@ -79,11 +79,11 @@ class Sphere(Shape):
             Initializes the Sphere object with the given radius, number of points, and color.
 
         generate():
-            Generates the points representing the sphere using a uniform distribution in volume.
+            Generates the points representing the sphere on its surface.
 
         extract_disk():
             Extracts points close to the z=0 plane (disk) within a given tolerance and creates a point cloud.
-        """
+    """
     def __init__(self, radius, nb_points, color=(0, 0, 1)):
         super().__init__(nb_points, color)
         self.nb_points = nb_points
@@ -94,6 +94,8 @@ class Sphere(Shape):
         self.disk_pc = None
 
         self.generate()
+        if self.points is None or len(self.points) == 0:
+            raise ValueError("Points array is empty or not initialized. Ensure 'generate' method is called correctly.")
         self.pc = self.to_point_cloud()
         print("===== Disk =====")
         print(f"Disk area = {self.disk_area:.4f}")
@@ -103,18 +105,17 @@ class Sphere(Shape):
     def generate(self):
         phi = np.random.uniform(0, np.pi, self.nb_points)
         theta = np.random.uniform(0, 2 * np.pi, self.nb_points)
-        r = np.cbrt(np.random.uniform(0, self.radius, self.nb_points))  # Cube root for uniform distribution in volume
 
-        x = self.center[0] + r * np.sin(phi) * np.cos(theta)
-        y = self.center[1] + r * np.sin(phi) * np.sin(theta)
-        z = self.center[2] + r * np.cos(phi)
+        x = self.center[0] + self.radius * np.sin(phi) * np.cos(theta)
+        y = self.center[1] + self.radius * np.sin(phi) * np.sin(theta)
+        z = self.center[2] + self.radius * np.cos(phi)
 
         self.points = np.column_stack((x, y, z))
     
-    def extract_disk(self, tolerance=0.01):
+    def extract_disk(self):
         # Extract points close to the center of the sphere (z = 0)
         z_level = 0
-        tolerance = 0.01
+        tolerance = 0.005
         disk_points = self.points[np.abs(self.points[:, 2] - z_level) < tolerance]
         
         # Create a new point cloud for the disk
@@ -170,11 +171,39 @@ class Cuboid(Shape):
         x_min, y_min, z_min = self.center - half_lengths
         x_max, y_max, z_max = self.center + half_lengths
 
-        x = np.random.uniform(x_min, x_max, self.nb_points)
-        y = np.random.uniform(y_min, y_max, self.nb_points)
-        z = np.random.uniform(z_min, z_max, self.nb_points)
+        points = []
 
-        self.points = np.column_stack((x, y, z))
+        # Generate points on the faces of the cuboid
+        for _ in range(self.nb_points):
+            face = np.random.choice(['xy_min', 'xy_max', 'xz_min', 'xz_max', 'yz_min', 'yz_max'])
+            if face == 'xy_min':  # Bottom face
+                x = np.random.uniform(x_min, x_max)
+                y = np.random.uniform(y_min, y_max)
+                z = z_min
+            elif face == 'xy_max':  # Top face
+                x = np.random.uniform(x_min, x_max)
+                y = np.random.uniform(y_min, y_max)
+                z = z_max
+            elif face == 'xz_min':  # Front face
+                x = np.random.uniform(x_min, x_max)
+                y = y_min
+                z = np.random.uniform(z_min, z_max)
+            elif face == 'xz_max':  # Back face
+                x = np.random.uniform(x_min, x_max)
+                y = y_max
+                z = np.random.uniform(z_min, z_max)
+            elif face == 'yz_min':  # Left face
+                x = x_min
+                y = np.random.uniform(y_min, y_max)
+                z = np.random.uniform(z_min, z_max)
+            elif face == 'yz_max':  # Right face
+                x = x_max
+                y = np.random.uniform(y_min, y_max)
+                z = np.random.uniform(z_min, z_max)
+
+            points.append((x, y, z))
+
+        self.points = np.array(points)
 
     def extract_section(self):
         z_level = 0
@@ -232,7 +261,6 @@ class Pyramid(Shape):
         print(f"Triangle area = {self.real_area: .4f}")
         print(f"Triangle perimeter = {self.real_perimeter: .4f}")
         print()
-
     def generate(self):
         cx, cy, cz = self.center
         half_size = self.base_size / 2
@@ -246,20 +274,42 @@ class Pyramid(Shape):
         ]
         v_top = (cx, cy, cz + self.height)
 
-        # Generate random points inside the pyramid
+        # Generate random points on the faces of the pyramid
         points = []
-        for _ in range(self.nb_points):
-            # Generate a random height level with linear distribution
-            h = np.random.uniform(0, 1)
-            z = cz + h * self.height
 
-            # Compute the size of the base at this height
-            scale = 1 - h
-            base_half_size = half_size * scale
+        # Base face
+        for _ in range(self.nb_points // 4):
+            x = np.random.uniform(cx - half_size, cx + half_size)
+            y = np.random.uniform(cy - half_size, cy + half_size)
+            z = cz
+            points.append((x, y, z))
 
-            # Generate a random point within the scaled base
-            x = np.random.uniform(cx - base_half_size, cx + base_half_size)
-            y = np.random.uniform(cy - base_half_size, cy + base_half_size)
+        # Side faces
+        for _ in range(self.nb_points // 4):
+            # Randomly pick one of the four triangular faces
+            face = np.random.choice(['front', 'back', 'left', 'right'])
+
+            if face == 'front':  # Front face
+                x1, y1, z1 = v_base[0]
+                x2, y2, z2 = v_base[1]
+            elif face == 'back':  # Back face
+                x1, y1, z1 = v_base[2]
+                x2, y2, z2 = v_base[3]
+            elif face == 'left':  # Left face
+                x1, y1, z1 = v_base[0]
+                x2, y2, z2 = v_base[3]
+            elif face == 'right':  # Right face
+                x1, y1, z1 = v_base[1]
+                x2, y2, z2 = v_base[2]
+
+            # Interpolate a random point on the triangular face
+            u, v = np.random.uniform(0, 1), np.random.uniform(0, 1)
+            if u + v > 1:
+                u, v = 1 - u, 1 - v
+
+            x = (1 - u - v) * v_top[0] + u * x1 + v * x2
+            y = (1 - u - v) * v_top[1] + u * y1 + v * y2
+            z = (1 - u - v) * v_top[2] + u * z1 + v * z2
 
             points.append((x, y, z))
 
@@ -333,7 +383,7 @@ if __name__ == "__main__":
         save_folder.mkdir(parents=True, exist_ok=True)
 
         sphere_instance, cuboid_instance, pyramid_instance = generate_save_clouds(
-            num_points=20000, 
+            num_points=200000, 
             sphere_radius=1, 
             save=False, 
             save_folder=save_folder, 
@@ -345,6 +395,7 @@ if __name__ == "__main__":
         # ======= Generate disk =======
         # disk_pc = sphere_instance.extract_disk()
         # disk_processor = PointCloudProcessor(sphere_instance.pc)
+        # print(len(disk_pc.points))
         # disk_processor.visualizer(window_name="Disk", geom1=disk_pc, save=False)
 
         # ======= Generate rectangle =======
@@ -357,10 +408,14 @@ if __name__ == "__main__":
         # triangle_processor = PointCloudProcessor(pyramid_instance.pc)
         # triangle_processor.visualizer(window_name="Triangle", geom1=triangle_pc, save=False)
 
-        # cloud = ContourExtractor()
-        # cloud.load_cloud(pc_name="triangle.ply", parent_folder=save_folder)
-        # cloud.downsample(voxel_size=0.01)
-        # cloud.pca_projection()
-        # cloud.extract(concavity=1.0, length_threshold=0.2)
+        cloud = ContourExtractor()
+        cloud.load_cloud(pc_name="parallelogram.ply", parent_folder=save_folder)
+        cloud.downsample(voxel_size=0.01)
+        #print(f"Number of points in the cloud after downsampling: {len(cloud.reduced_cloud.points)}")
+        #print(f"Number of points in the cloud before downsampling: {len(cloud.original_cloud.points)}")
+        cloud.pca_projection()
+        cloud.extract(method='concave', concavity=1.0, length_threshold=0.1)
+        print(f"Real area = {sphere_instance.disk_area:.4f}")
+        print(f"Real perimeter = {sphere_instance.disk_perimeter:.4f}")
 
     

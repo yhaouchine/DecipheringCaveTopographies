@@ -19,8 +19,10 @@ background_color = {
     "black": [0.0, 0.0, 0.0],
 }
 
+
 class PointCloudProcessor:
-    def __init__(self, pc: Optional[PointCloud] = None, position: Optional[np.ndarray] = None, thickness: Optional[float] = None):
+    def __init__(self, pc: Optional[PointCloud] = None, position: Optional[np.ndarray] = None,
+                 thickness: Optional[float] = None):
         """
         Constructor of the PointCloudProcessor class.
         """
@@ -33,7 +35,6 @@ class PointCloudProcessor:
         self.pick_point = None
         self.cross_section = None
         self.points_3d = None
-
 
     def load_cloud(self, pc_name: str, parent_folder: str):
         """
@@ -48,41 +49,41 @@ class PointCloudProcessor:
         return self.pc
 
     def visualizer(self, window_name: str, geom1: Geometry = None, geom2: Geometry = None, save: Optional[bool] = None,
-                   color_name: str = "white", filename: Union[Path, str,  None] = None) -> Union[np.ndarray, None]:
+                   color_name: str = "white", filename: Union[Path, str, None] = None) -> Union[np.ndarray, None]:
         """
         Function to visualize the point cloud and select points in the visualizer.
 
         Parameters:
         -----------
-        window_name: str
-            Name of the window
-        geom1: open3d.geometry.Geometry
-            First geometry to visualize
-        geom2: open3d.geometry.Geometry
-            Second geometry to visualize (optional)
-        save: bool
-            If True, the point cloud is saved
-        color_name: str
-            Name of the color of the background
-        filename: str
-            Name of the file to save the point cloud
+            - window_name: str
+                 Name of the window
+            - geom1: open3d.geometry.Geometry
+                 First geometry to visualize
+            - geom2: open3d.geometry.Geometry
+                 Second geometry to visualize (optional)
+            - save: bool
+                 If True, the point cloud is saved
+            - color_name: str
+                 Name of the color of the background
+            - filename: str
+                 Name of the file to save the point cloud
         
         Returns:
         --------
-        pick_point: np.ndarray
-            Array of the picked points
+            - pick_point: np.ndarray
+                 Array of the picked points
         """
-        
+
         save_folder = Path("saved_clouds")
-        save_folder.mkdir(parents=True, exist_ok=True)  # Create the folder if it does not exist
+        save_folder.mkdir(parents=True, exist_ok=True)
         back_color = background_color.get(color_name.lower(), [1.0, 1.0, 1.0])
 
         if geom1 and geom2:
             o3d.visualization.draw_geometries(
                 [geom1, geom2],
-                window_name = window_name,
-                width = 1280,
-                height = 800
+                window_name=window_name,
+                width=1280,
+                height=800
             )
             return None
 
@@ -125,7 +126,7 @@ class PointCloudProcessor:
         visualizer.destroy_window()
 
         return self.pick_point
-    
+
     def extract_cross_section(self, thickness: float) -> PointCloud:
         """
         Function to extract a cross-section of the point cloud located at the picked point in the visualizer.
@@ -161,7 +162,6 @@ class PointCloudProcessor:
 
 
 if __name__ == "__main__":
-
     # initializing GUI instance
     o3d.visualization.gui.Application.instance.initialize()
 
@@ -173,8 +173,11 @@ if __name__ == "__main__":
     point_cloud = pcp_instance.load_cloud(pc_name=point_cloud_name, parent_folder=parent_folder)
 
     # Extracting the cross-section
-    thickness = 0.1
-    cross_section = pcp_instance.extract_cross_section(thickness)
+    tolerence = 0.1
+    cross_section = pcp_instance.extract_cross_section(tolerence)
 
     # Visualizing the cross-section
     pcp_instance.visualizer(window_name="Cross-Section", geom1=cross_section, save=None)
+
+    # TODO: 
+    #   Add ability to do a cross-section in any direction.
