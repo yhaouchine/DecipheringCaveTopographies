@@ -36,6 +36,8 @@ class ContourExtractor:
         self.durations: Optional[float] = None
         self.area: Optional[float] = None
         self.perimeter: Optional[float] = None
+        self.roughness: Optional[float] = None
+        self.curvature : Optional[np.ndarray] = None
 
     def load_cloud(self, pc_name: str, parent_folder: str):
         """
@@ -338,6 +340,57 @@ class ContourExtractor:
             self.perimeter = np.sum(np.sqrt(np.diff(x) ** 2 + np.diff(y) ** 2))
             logger.info(f"Perimeter of the contour: {self.perimeter:.4f} m")
 
+    def compute_roughness(self) -> float:
+        """
+        Compute the roughness of the contour as the standard deviation of the curvature at each point of the contour.
+        
+        The roughness of a contour can be defined as the dispersion of the values of curvature along the contour.
+        
+        The curvature is computed using the formula:
+        kappa = (dx * d2x - dy * d2y) / (dx^2 + dy^2)^(3/2)
+        
+        where: 
+            - dx and dy are the first derivatives of the x and y coordinates of the contour.
+            - d2x and d2y are the second derivatives of the x and y coordinates of the contour.
+        
+        The roughness is then calculated as the standard deviation of the curvature values. The formula is as follows:
+        sigma = sqrt(1/n * sum((kappa_i - kappa_mean)^2))
+        
+        where:
+            - n is the number of points in the contour.
+            - kappa_i is the curvature at point i.
+            - kappa_mean is the mean curvature of the contour.
+
+        Returns:
+        --------
+            - roughness: float
+                The standard deviation of the curvature values, representing the roughness of the contour.
+                A high value indicates a rough contour, while a low value indicates a smooth contour.
+        """
+
+        # Extrcat x and y coordinates of the contour
+        x, y  = self.contour[:, 0], self.contour[:, 1]
+
+        # Compute first derivatives
+        dx = np.gradient(x)
+        dy = np.gradient(y)
+
+        # Compute second derivatives
+        d2x = np.gradient(dx)
+        d2y = np.gradient(dy)
+
+        # Compute curvature
+        self.curvature = (dx * d2x - dy * d2y) / (dx ** 2 + dy ** 2) ** (3 / 2)
+
+        # Handle NaN values in curvature
+        self.curvature[np.isnan(self.curvature)] = 0.0
+        self.curvature[np.isinf(self.curvature)] = 0.0
+
+        # Compute standard deviation of the curvature
+        self.roughness = np.std(self.curvature)
+
+        return self.roughness
+    
     def display_contour(self):
         """
         Display the contour in the PCA plane along with the point cloud and the computed area and perimeter.
@@ -364,6 +417,7 @@ class ContourExtractor:
         # Calculate the area and perimeter enclosed in the contour
         self.compute_area()
         self.compute_perimeter()
+        self.compute_roughness()
 
         # Fill the contour in the PCA plan
         polygon = plt.Polygon(self.contour.tolist(), closed=True, facecolor='red', alpha=0.2, edgecolor='r',
@@ -376,8 +430,10 @@ class ContourExtractor:
         # Add area and perimeter to the legend
         area_label = f"Area = {self.area:.4f} m²"
         perimeter_label = f"Perimeter = {self.perimeter:.4f} m"
+        roughness_label = f"Roughness = {self.roughness:.2f}"
         ax2d.plot([], [], ' ', label=area_label)
         ax2d.plot([], [], ' ', label=perimeter_label)
+        ax2d.plot([], [], ' ', label=roughness_label)
 
         ax2d.set_title("Contour in PCA Plane")
         ax2d.set_xlabel("PC1")
@@ -431,7 +487,7 @@ if __name__ == "__main__":
     cloud_name = "cross_section_2_clean.ply"
     cloud_location = "saved_clouds"
 
-    voxel_size = 0.1
+    voxel_size = 0.01
     method = 'concave'
 
     alpha = 3.5

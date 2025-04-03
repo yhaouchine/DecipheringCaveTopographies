@@ -388,8 +388,8 @@ if __name__ == "__main__":
             save=False, 
             save_folder=save_folder, 
             s=True, 
-            c=True, 
-            p=True
+            c=False, 
+            p=False
             )
         
         # ======= Generate disk =======
@@ -409,12 +409,12 @@ if __name__ == "__main__":
         # triangle_processor.visualizer(window_name="Triangle", geom1=triangle_pc, save=False)
 
         cloud = ContourExtractor()
-        cloud.load_cloud(pc_name="parallelogram.ply", parent_folder=save_folder)
-        cloud.downsample(voxel_size=0.01)
+        cloud.load_cloud(pc_name="circle.ply", parent_folder=save_folder)
+        cloud.downsample(voxel_size=0.1)
         #print(f"Number of points in the cloud after downsampling: {len(cloud.reduced_cloud.points)}")
         #print(f"Number of points in the cloud before downsampling: {len(cloud.original_cloud.points)}")
         cloud.pca_projection()
-        cloud.extract(method='concave', concavity=1.0, length_threshold=0.1)
+        cloud.extract(method='concave', concavity=0.1, length_threshold=0.01)
         print(f"Real area = {sphere_instance.disk_area:.4f}")
         print(f"Real perimeter = {sphere_instance.disk_perimeter:.4f}")
 
