@@ -146,16 +146,17 @@ class DevelopedSection:
 
         if self.developed_section_ini is None or len(self.developed_section_ini) == 0:
             raise ValueError("No points available in 'developed_section_ini' for PCA projection.")
-        
-        # Maintain Z axis vertical
-        z_axis = np.array([0, 0, 1])
-
         self.mean = np.mean(self.developed_section_ini, axis=0)
         centered_points = self.developed_section_ini - self.mean
 
         pca = PCA(n_components=3)
         pca.fit(centered_points)
         self.pca_axes = pca.components_
+
+        # Ensure the vertical axis is the one closest to Z
+        z_axis = np.array([0, 0, 1])
+        vertical_idx = np.argmax(np.abs(np.dot(self.pca_axes, z_axis)))
+        self.pca_axes[[1, vertical_idx]] = self.pca_axes[[vertical_idx, 1]]
 
         self.points_2d = pca.transform(centered_points)[:, :2]
         self.projected_points = self.points_2d
