@@ -61,17 +61,51 @@ class DevelopedSection:
             raise ValueError("No points were selected for the cutting line.")
         return self.selected_idx, self.selected_pts
 
-    def interpolate_line(self, num_samples: int = 500000) -> np.ndarray:
+    def sort_points(self):
+        """
+        Sort the selected points based on their Euclidean distance from the first point.
+        """
+
+        if self.selected_pts is None or len(self.selected_pts) < 2:
+            raise ValueError("Selected points are not defined or contain less than two points.")
+        
+        # Calculate the Euclidean distances of all points from the first point
+        dist = np.linalg.norm(self.selected_pts - self.selected_pts[0], axis=1)
+
+        # Sort the points based on the distances
+        sorted_indices = np.argsort(dist)
+        self.selected_pts = self.selected_pts[sorted_indices]
+        self.selected_idx = np.array(self.selected_idx)[sorted_indices]
+
+    def interpolate_line(self, auto_resolution: bool = True, resolution: float = 0.01, nb_points: int = 500000) -> np.ndarray:
         """
         Interpolates a continuous line from selected points.
+
+        Parameters:
+        -----------
+            - auto_resolution: bool, optional (default=True)
+                If True, the number of points for interpolation is automatically determined based on the length of the line and the resolution.
+                If False, the number of points is fixed and determined by the `nb_points` parameter.
+            - resolution: float, optional (default=0.01)
+                The desired spacing between points along the interpolated line when `auto_resolution` is True.
+                This value is used to calculate the number of points based on the line's length.
         """
-        if len(self.selected_idx) < 2:
+        if self.selected_idx is None or len(self.selected_idx) < 2:
             raise ValueError("At least two points are required for interpolation.")
+        
         t = np.linspace(0, 1, len(self.selected_pts))
         interp_func = interp1d(t, self.selected_pts, axis=0, kind='linear')
-        self.interpolated_line = interp_func(np.linspace(0, 1, num_samples))
 
-        return self.interpolated_line
+        if auto_resolution:
+            # Automatically determine the number of points based on the length of the line
+            if self.selected_pts is None or len(self.selected_pts) < 2:
+                raise ValueError("Selected points are not defined or contain fewer than two points.")
+            
+            length = np.linalg.norm(self.selected_pts[-1] - self.selected_pts[0])
+            nb_points = int(length / resolution) + 1
+
+        # Perform the interpolation using the calculated or provided number of points
+        self.interpolated_line = interp_func(np.linspace(0, 1, nb_points))
 
     def extract_section(self, tolerance: float = 0.01) -> np.ndarray:
         """
@@ -112,6 +146,10 @@ class DevelopedSection:
 
         if self.developed_section_ini is None or len(self.developed_section_ini) == 0:
             raise ValueError("No points available in 'developed_section_ini' for PCA projection.")
+        
+        # Maintain Z axis vertical
+        z_axis = np.array([0, 0, 1])
+
         self.mean = np.mean(self.developed_section_ini, axis=0)
         centered_points = self.developed_section_ini - self.mean
 
@@ -234,7 +272,7 @@ class DevelopedSection:
 
     def display_section(self):
         plt.figure(figsize=(10, 6))
-        plt.scatter(self.projected_points[:, 0], self.projected_points[:, 1], c='blue', s=1, alpha=0.6, label='Developed Section')
+        plt.scatter(self.projected_points[:, 0], self.projected_points[:, 1], c='blue', s=1, alpha=0.6, label='Developed Section Points')
         plt.title("Developed Section Visualization")
         plt.xlabel("PC1")
         plt.ylabel("PC2")
@@ -255,12 +293,16 @@ if __name__ == "__main__":
         print(f"Loading point cloud took {time.perf_counter() - start_time:.4f} seconds")
         
         # Select points for the cutting line
-        start_time = time.perf_counter()
         developed_section_instance.select_line_of_cut()
         
+        # Sort the selected points
+        start_time = time.perf_counter()
+        developed_section_instance.sort_points()
+        print(f"Sorting points took {time.perf_counter() - start_time:.4f} seconds")
+
         # Interpolate the cutting line
         start_time = time.perf_counter()
-        developed_section_instance.interpolate_line()
+        developed_section_instance.interpolate_line(auto_resolution=True, resolution=0.01)
         print(f"Interpolating cutting line took {time.perf_counter() - start_time:.4f} seconds")
         
         # Extract points along the cutting line
@@ -282,4 +324,4 @@ if __name__ == "__main__":
 # - Add sorting of the points in the developed section in order to avoid crossing lines
 # - Ajust the height value on the graph
 # - Add a function to save the developed section as a .ply file
-# - Add ability to automatically select real cutting line points instead of doing an interpolation
+# - Adapt the PCA projection for cases where the points are more distributed in the horizontal plane than in the vertical one
