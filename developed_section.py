@@ -271,16 +271,37 @@ class DevelopedSection:
         plt.tight_layout()
         plt.show()
 
-    def display_section(self):
-        plt.figure(figsize=(10, 6))
-        plt.scatter(self.projected_points[:, 0], self.projected_points[:, 1], c='blue', s=1, alpha=0.6, label='Developed Section Points')
-        plt.title("Developed Section Visualization")
-        plt.xlabel("PC1")
-        plt.ylabel("PC2")
-        plt.axis('equal')
-        plt.legend()
+    def display_section(self, points):
+        fig = plt.figure(figsize=(10, 6))
+        ax = fig.add_subplot(111, projection='3d')
+        ax.scatter(points[:, 0], points[:, 1], points[:, 2], c='blue', s=1, alpha=0.6, label='Developed Section Points')
+        ax.set_title("Developed Section Visualization")
+        ax.set_xlabel("PC1")
+        ax.set_ylabel("PC2")
+        ax.set_zlabel("PC3")
+        ax.legend()
         plt.show()
+
+    def to_ply(self, points, filename: str, save_folder: str):
+        """
+        Save the projected developed section to a PLY file.
+        """
+
+        if points is None or len(points) == 0:
+            raise ValueError("No points available to save.")
         
+        # Create a point cloud object
+        pc = o3d.geometry.PointCloud()
+        pc.points = o3d.utility.Vector3dVector(points)
+
+        # Save the point cloud to a PLY file
+        ply_path = f"{save_folder}/{filename}"
+        o3d.io.write_point_cloud(ply_path, pc)
+        self.logger.info(f"Point cloud saved as: {ply_path}")
+
+
+        
+
 if __name__ == "__main__":
 
     point_cloud_name = "cave_res_1cm.ply"
@@ -308,7 +329,7 @@ if __name__ == "__main__":
         
         # Extract points along the cutting line
         start_time = time.perf_counter()
-        developed_section_instance.extract_section(tolerance=0.02)
+        developed_section_instance.extract_section(tolerance=0.2)
         print(f"Extracting points along the line took {time.perf_counter() - start_time:.4f} seconds")
         
         # Project the extracted points to 2D
@@ -316,13 +337,13 @@ if __name__ == "__main__":
         developed_section_instance.pca_projection(diagnosis=True, visualize=True)
         print(f"Projecting to 2D took {time.perf_counter() - start_time:.4f} seconds")
 
-        developed_section_instance.display_section()
+        developed_section_instance.display_section(points=developed_section_instance.developed_section_ini)
+
+        # Save the section to a PLY file
+        developed_section_instance.to_ply(points=developed_section_instance.developed_section_ini, filename="developed_section.ply", save_folder="saved_clouds")
     
     except Exception as e:
         print(f"An error occurred: {e}")
 
 #TODO:
-# - Add sorting of the points in the developed section in order to avoid crossing lines
-# - Ajust the height value on the graph
 # - Add a function to save the developed section as a .ply file
-# - Adapt the PCA projection for cases where the points are more distributed in the horizontal plane than in the vertical one

@@ -368,7 +368,7 @@ class ContourExtractor:
                 A high value indicates a rough contour, while a low value indicates a smooth contour.
         """
 
-        # Extrcat x and y coordinates of the contour
+        # Extract x and y coordinates of the contour
         x, y  = self.contour[:, 0], self.contour[:, 1]
 
         # Compute first derivatives
@@ -484,15 +484,15 @@ class ContourExtractor:
 
 
 if __name__ == "__main__":
-    cloud_name = "cross_section_2_clean.ply"
+    cloud_name = "developed_section.ply"
     cloud_location = "saved_clouds"
 
-    voxel_size = 0.01
+    voxel_size = 0.5
     method = 'concave'
 
     alpha = 3.5
     concavity = 1.0
-    length_threshold = 0.1
+    length_threshold = 0.05
 
     diagnose = False
     visualize = False
