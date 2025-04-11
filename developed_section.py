@@ -318,7 +318,7 @@ class DevelopedSection:
         self.logger.info(f"Point cloud saved as: {ply_path}")
 
 
-def main(pc_name, save_folder):
+def main(pc_name, save_folder, save_name: str, pca: bool = False):
     try:
         developed_section_instance = DevelopedSection()
         developed_section_instance.load_cloud(pc_name=pc_name, parent_folder=save_folder)
@@ -326,9 +326,9 @@ def main(pc_name, save_folder):
         developed_section_instance.sort_points()
         developed_section_instance.interpolate_line(auto_resolution=True, resolution=0.01)
         developed_section_instance.extract_section(tolerance=0.02)
-        developed_section_instance.pca_projection(diagnosis=True, visualize=True)
+        developed_section_instance.pca_projection(diagnosis=True, visualize=True) if pca else None
         developed_section_instance.display_section(points=developed_section_instance.developed_section_ini)
-        developed_section_instance.to_ply(points=developed_section_instance.developed_section_ini, filename="developed_section.ply", save_folder="saved_clouds")
+        developed_section_instance.to_ply(points=developed_section_instance.developed_section_ini, filename=save_name, save_folder="saved_clouds")
     except Exception as e:
         print(f"An error occurred: {e}")       
 
@@ -337,4 +337,5 @@ if __name__ == "__main__":
 
     point_cloud_name = "cave_res_1cm.ply"
     save_folder = "point_clouds"
-    main(pc_name=point_cloud_name, save_folder=save_folder)
+    saving_filename = "developed_section.ply"
+    main(pc_name=point_cloud_name, save_folder=save_folder, save_name=saving_filename, pca=False)
