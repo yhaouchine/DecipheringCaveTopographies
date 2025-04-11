@@ -3,10 +3,11 @@ import alphashape
 import logging
 import matplotlib.pyplot as plt
 import open3d as o3d
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Union
 from open3d.cpu.pybind.geometry import PointCloud
 from concave_hull import concave_hull
 from sklearn.decomposition import PCA
+from shapely.geometry import Polygon, MultiPolygon
 
 logger = logging.getLogger(__name__)
 
@@ -320,11 +321,20 @@ class ContourExtractor:
 
         if self.contour is None:
             raise ValueError("No contour computed, please compute a contour first.")
-        else:
+        try:
             logger.info("===== Computing area... =====")
-            x, y = self.contour[:, 0], self.contour[:, 1]
-            self.area = 0.5 * np.abs(np.sum(x[:-1] * y[1:] - x[1:] * y[:-1]) + (x[-1] * y[0] - x[0] * y[-1]))
+
+            if isinstance(self.contour, Polygon):
+                self.area = self.contour.area
+            elif isinstance(self.contour, MultiPolygon):
+                self.area = sum(p.area for p in self.contour.geoms)
+            else:
+                x, y = self.contour[:, 0], self.contour[:, 1]
+                self.area = 0.5 * np.abs(np.sum(x[:-1] * y[1:] - x[1:] * y[:-1]) + (x[-1] * y[0] - x[0] * y[-1]))
             logger.info(f"Area of the contour: {self.area:.4f} m²")
+        except Exception as e:
+            logger.error(f"An error occurred while computing the area: {e}")
+            raise
 
     def compute_perimeter(self):
         """
@@ -333,12 +343,21 @@ class ContourExtractor:
 
         if self.contour is None:
             raise ValueError("No contour computed, please compute a contour using the computing methods implemented.")
-        else:
+        try:
             logger.info("")
             logger.info("===== Computing perimeter... =====")
-            x, y = self.contour[:, 0], self.contour[:, 1]
-            self.perimeter = np.sum(np.sqrt(np.diff(x) ** 2 + np.diff(y) ** 2))
+            if isinstance(self.contour, Polygon):
+                self.perimeter = self.contour.length
+            elif isinstance(self.contour, MultiPolygon):
+                self.perimeter = sum(p.length for p in self.contour.geoms)
+            else:
+                x, y = self.contour[:, 0], self.contour[:, 1]
+                self.perimeter = np.sum(np.sqrt(np.diff(x) ** 2 + np.diff(y) ** 2))
             logger.info(f"Perimeter of the contour: {self.perimeter:.4f} m")
+        except Exception as e:
+            logger.error(f"An error occurred while computing the area: {e}")
+            raise
+
 
     def compute_roughness(self) -> float:
         """
@@ -368,8 +387,19 @@ class ContourExtractor:
                 A high value indicates a rough contour, while a low value indicates a smooth contour.
         """
 
-        # Extract x and y coordinates of the contour
-        x, y  = self.contour[:, 0], self.contour[:, 1]
+        if isinstance(self.contour, Polygon):
+            x, y = self.contour.exterior.xy
+        elif isinstance(self.contour, MultiPolygon):
+            x, y = [], []
+            for polygon in self.contour.geoms:
+                xi, yi = polygon.exterior.xy
+                x.extend(xi)
+                y.extend(yi)
+        elif isinstance(self.contour, np.ndarray):
+            # Extract x and y coordinates of the contour
+            x, y  = self.contour[:, 0], self.contour[:, 1]
+        else:
+            raise TypeError("Unsupported contour format for curvature compytation.")
 
         # Compute first derivatives
         dx = np.gradient(x)
@@ -380,7 +410,12 @@ class ContourExtractor:
         d2y = np.gradient(dy)
 
         # Compute curvature
-        self.curvature = (dx * d2x - dy * d2y) / (dx ** 2 + dy ** 2) ** (3 / 2)
+        numerator = (dx * d2x - dy * d2y)
+        denominator = (dx ** 2 + dy ** 2) ** (3 / 2)
+        if np.any(denominator == 0):
+            logger.warning("!!!WARNING!!!  Denominator contains zero values, curvature may be undefined at some points.")
+            denominator[denominator == 0] = np.nan
+        self.curvature = numerator / denominator
 
         # Handle NaN values in curvature
         self.curvature[np.isnan(self.curvature)] = 0.0
@@ -419,12 +454,23 @@ class ContourExtractor:
         self.compute_perimeter()
         self.compute_roughness()
 
-        # Fill the contour in the PCA plan
-        polygon = plt.Polygon(self.contour.tolist(), closed=True, facecolor='red', alpha=0.2, edgecolor='r',
-                              linewidth=2.0)
-        ax2d.add_patch(polygon)
+        if isinstance(self.contour, Polygon):
+            coords = np.array(self.contour.exterior.coords)
+        elif isinstance(self.contour, MultiPolygon):
+            coords = []
+            for poly in self.contour.geoms:
+                coords.extend(poly.exterior.coords)
+                coords.append((None, None))  # Séparateur pour affichage (ex: matplotlib)
+            coords = np.array(coords, dtype=object)
+        elif isinstance(self.contour, np.ndarray):
+            coords = self.contour
+        else:
+            raise TypeError("Unsupported contour format for display.")
 
-        ax2d.plot(self.contour[:, 0], self.contour[:, 1], 'r--', linewidth=2.0, label="Contour (In the PCA Plane)")
+        # Fill the contour in the PCA plan
+        polygon = plt.Polygon(coords, closed=True, facecolor='red', alpha=0.2, edgecolor='r', linewidth=2.0)
+        ax2d.add_patch(polygon)
+        ax2d.plot(coords[:, 0], coords[:, 1], 'r--', linewidth=2.0, label="Contour (In the PCA Plane)")
         ax2d.scatter(self.projected_points[:, 0], self.projected_points[:, 1], c='black', s=1, label="Projected points")
 
         # Add area and perimeter to the legend
@@ -482,17 +528,22 @@ class ContourExtractor:
         logger.info("")
         self.display_contour()
 
+    def reconstruct_missing_points(self):
+        """
+        Reconstruct the missing points using interpolation algorithms.
+        """
+
 
 if __name__ == "__main__":
     cloud_name = "developed_section.ply"
     cloud_location = "saved_clouds"
 
-    voxel_size = 0.1
-    method = 'concave'
+    voxel_size = 0.01
+    method = 'concave'  # 'convex' or 'concave'
 
-    alpha = 3.5
+    alpha = 0.05
     concavity = 1.0
-    length_threshold = 0.01
+    length_threshold = 0.02
 
     diagnose = False
     visualize = False
