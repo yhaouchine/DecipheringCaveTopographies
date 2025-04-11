@@ -487,12 +487,12 @@ if __name__ == "__main__":
     cloud_name = "developed_section.ply"
     cloud_location = "saved_clouds"
 
-    voxel_size = 0.5
+    voxel_size = 0.1
     method = 'concave'
 
     alpha = 3.5
     concavity = 1.0
-    length_threshold = 0.05
+    length_threshold = 0.01
 
     diagnose = False
     visualize = False

@@ -31,12 +31,13 @@ class DevelopedSection:
         self.projected_points = None
         self.developed_section_ini = None
         self.developed_section_projected = None
-
+        self.z_axis = np.array([0, 0, 1])
 
     def load_cloud(self, pc_name: str, parent_folder: str):
         """
         Loads a point cloud from a file.
         """
+        start_time = time.perf_counter()
         pc_path = f"{parent_folder}/{pc_name}"
         pcd = o3d.io.read_point_cloud(pc_path)
         if pcd.is_empty():
@@ -44,6 +45,7 @@ class DevelopedSection:
         
         self.pc = pcd
         self.points_3d = np.asarray(self.pc.points)
+        print(f"Point cloud loaded successfuly in {time.perf_counter() - start_time:.4f} seconds")
 
     def select_line_of_cut(self) -> List[int]:
         """
@@ -69,6 +71,8 @@ class DevelopedSection:
         if self.selected_pts is None or len(self.selected_pts) < 2:
             raise ValueError("Selected points are not defined or contain less than two points.")
         
+        start_time = time.perf_counter()
+        
         # Calculate the Euclidean distances of all points from the first point
         dist = np.linalg.norm(self.selected_pts - self.selected_pts[0], axis=1)
 
@@ -76,6 +80,8 @@ class DevelopedSection:
         sorted_indices = np.argsort(dist)
         self.selected_pts = self.selected_pts[sorted_indices]
         self.selected_idx = np.array(self.selected_idx)[sorted_indices]
+
+        print(f"Points sorted successfuly in {time.perf_counter() - start_time:.4f} seconds")
 
     def interpolate_line(self, auto_resolution: bool = True, resolution: float = 0.01, nb_points: int = 500000) -> np.ndarray:
         """
@@ -93,6 +99,8 @@ class DevelopedSection:
         if self.selected_idx is None or len(self.selected_idx) < 2:
             raise ValueError("At least two points are required for interpolation.")
         
+        start_time = time.perf_counter()
+
         t = np.linspace(0, 1, len(self.selected_pts))
         interp_func = interp1d(t, self.selected_pts, axis=0, kind='linear')
 
@@ -107,12 +115,16 @@ class DevelopedSection:
         # Perform the interpolation using the calculated or provided number of points
         self.interpolated_line = interp_func(np.linspace(0, 1, nb_points))
 
+        print(f"Line of cut interpolated successfuly in {time.perf_counter() - start_time:.4f} seconds")
+
     def extract_section(self, tolerance: float = 0.01) -> np.ndarray:
         """
         Fast extraction of points near the interpolated cutting line using a KDTree.
         """
         if self.pc is None or self.interpolated_line is None:
             raise ValueError("Point cloud or interpolated line is not defined.")
+
+        start_time = time.perf_counter()
 
         points = np.asarray(self.pc.points)
         tree = cKDTree(points[:, :2])  # Only use X,Y for 2D proximity
@@ -126,6 +138,9 @@ class DevelopedSection:
             raise ValueError("No points were extracted along the cutting line.")
 
         self.developed_section_ini = points[list(indices)]
+        
+        print(f"Section's points extracted successfuly in {time.perf_counter() - start_time:.4f} seconds")
+
         return self.developed_section_ini
     
     def pca_projection(self, diagnosis: bool = False, visualize: bool = False) -> np.ndarray:
@@ -146,6 +161,8 @@ class DevelopedSection:
 
         if self.developed_section_ini is None or len(self.developed_section_ini) == 0:
             raise ValueError("No points available in 'developed_section_ini' for PCA projection.")
+        
+        start_time = time.perf_counter()
         self.mean = np.mean(self.developed_section_ini, axis=0)
         centered_points = self.developed_section_ini - self.mean
 
@@ -154,8 +171,7 @@ class DevelopedSection:
         self.pca_axes = pca.components_
 
         # Ensure the vertical axis is the one closest to Z
-        z_axis = np.array([0, 0, 1])
-        vertical_idx = np.argmax(np.abs(np.dot(self.pca_axes, z_axis)))
+        vertical_idx = np.argmax(np.abs(np.dot(self.pca_axes, self.z_axis)))
         self.pca_axes[[1, vertical_idx]] = self.pca_axes[[vertical_idx, 1]]
 
         self.points_2d = pca.transform(centered_points)[:, :2]
@@ -166,6 +182,8 @@ class DevelopedSection:
 
         if visualize:
             self._visualize_pca(pca)
+
+        print(f"PCA performed successfuly in {time.perf_counter() - start_time:.4f} seconds")
 
         return self.projected_points
     
@@ -300,50 +318,23 @@ class DevelopedSection:
         self.logger.info(f"Point cloud saved as: {ply_path}")
 
 
-        
+def main(pc_name, save_folder):
+    try:
+        developed_section_instance = DevelopedSection()
+        developed_section_instance.load_cloud(pc_name=pc_name, parent_folder=save_folder)
+        developed_section_instance.select_line_of_cut()
+        developed_section_instance.sort_points()
+        developed_section_instance.interpolate_line(auto_resolution=True, resolution=0.01)
+        developed_section_instance.extract_section(tolerance=0.02)
+        developed_section_instance.pca_projection(diagnosis=True, visualize=True)
+        developed_section_instance.display_section(points=developed_section_instance.developed_section_ini)
+        developed_section_instance.to_ply(points=developed_section_instance.developed_section_ini, filename="developed_section.ply", save_folder="saved_clouds")
+    except Exception as e:
+        print(f"An error occurred: {e}")       
+
 
 if __name__ == "__main__":
 
     point_cloud_name = "cave_res_1cm.ply"
     save_folder = "point_clouds"
-
-    try:
-        # Load the point cloud
-        start_time = time.perf_counter()
-        developed_section_instance = DevelopedSection()
-        developed_section_instance.load_cloud(pc_name=point_cloud_name, parent_folder=save_folder)
-        print(f"Loading point cloud took {time.perf_counter() - start_time:.4f} seconds")
-        
-        # Select points for the cutting line
-        developed_section_instance.select_line_of_cut()
-        
-        # Sort the selected points
-        start_time = time.perf_counter()
-        developed_section_instance.sort_points()
-        print(f"Sorting points took {time.perf_counter() - start_time:.4f} seconds")
-
-        # Interpolate the cutting line
-        start_time = time.perf_counter()
-        developed_section_instance.interpolate_line(auto_resolution=True, resolution=0.01)
-        print(f"Interpolating cutting line took {time.perf_counter() - start_time:.4f} seconds")
-        
-        # Extract points along the cutting line
-        start_time = time.perf_counter()
-        developed_section_instance.extract_section(tolerance=0.2)
-        print(f"Extracting points along the line took {time.perf_counter() - start_time:.4f} seconds")
-        
-        # Project the extracted points to 2D
-        start_time = time.perf_counter()
-        developed_section_instance.pca_projection(diagnosis=True, visualize=True)
-        print(f"Projecting to 2D took {time.perf_counter() - start_time:.4f} seconds")
-
-        developed_section_instance.display_section(points=developed_section_instance.developed_section_ini)
-
-        # Save the section to a PLY file
-        developed_section_instance.to_ply(points=developed_section_instance.developed_section_ini, filename="developed_section.ply", save_folder="saved_clouds")
-    
-    except Exception as e:
-        print(f"An error occurred: {e}")
-
-#TODO:
-# - Add a function to save the developed section as a .ply file
+    main(pc_name=point_cloud_name, save_folder=save_folder)
