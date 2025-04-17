@@ -2,73 +2,47 @@
 
 import open3d as o3d
 import numpy as np
+import tkinter as tk
 from open3d.cpu.pybind.geometry import PointCloud
-from process_cloud import PointCloudProcessor
-from tkinter import simpledialog, messagebox, Tk
+from process_cloud import CrossSection
+from tkinter import simpledialog, messagebox, Tk, filedialog
 from typing import Tuple, Optional, List
 
 
 class Ellipsoid(object):
-    def __init__(self, pc: PointCloud, selected_i: Optional[List[int]] = None, resolution: int = 15):
-        """
-        Contructor of the Ellipsoid class.
-        """
-
+    def __init__(self, pc: PointCloud, resolution: int = 15, selected_i: Optional[List[int]] = None, selected_coords: Optional[List[float]] = None):
         self.resolution = resolution
         self.pc = pc
         self.filtered_pc = None
-        self.a_axis = 1.0
-        self.b_axis = 1.0
-        self.c_axis = 1.0
+        self.dominant_axis = None
         self.selected_i = selected_i
+        self.selected_coords = [np.array(c) for c in selected_coords] if selected_coords is not None else None
         self.center_point = None
         self.line_set = None
-        self.l_axes = None
+        self.semi_axes = None
+        self.axis_labels = ['a_axis', 'b_axis', 'c_axis']
+
+    def ellipsoid_from_2_points(self):
+        p1_coords = np.array(self.selected_coords[0])
+        p2_coords = np.array(self.selected_coords[1])
+        self.center_point = np.mean([p1_coords, p2_coords], axis=0)
+        distance_vector = np.abs(p2_coords - p1_coords)
+        self.dominant_axis = np.argmax(distance_vector)
+        self.semi_axes = np.ones(3)
+        self.semi_axes[self.dominant_axis] = distance_vector[self.dominant_axis] / 2
+        print(f"Dominant axis: {self.axis_labels[self.dominant_axis]} = {self.semi_axes[self.dominant_axis]}")
+        return self.generate_ellipsoid_mesh()
     
-    def create(self) -> Tuple[o3d.geometry.LineSet, np.ndarray, list[float]]:
-        """
-        Function to create a wireframed ellipsoid, either by considering the c-axis (vertical axis) 
-        of the ellipsoid as defined between two points selected bu the user. Or by defining the center of the
-        ellispoid as the unique point selected by the user, and the length of the axes as determined bu the user.
+    def ellipsoid_from_1_point(self):
+        self.semi_axes = np.ones(3)
+        self.center_point = np.asarray(self.pc.points)[self.selected_i[0]]
+        return self.generate_ellipsoid_mesh()
 
-        Returns:
-        --------
-        line_set: open3d.geometry.LineSet
-            The wireframed ellispoid.
-
-        center_point: np.ndarray
-            The center of the ellipsoid.
-
-        l_axes: list[float] 
-            A list containing the lengths of the ellipsoid axes.
-        """
-        if self.selected_i is None:
-            raise ValueError("selected_i cannot be None.")
-        elif len(self.selected_i) == 2:
-            # Get the coordinates of the selected points
-            z_top = np.asarray(self.pc.points)[self.selected_i[0]]
-            z_bottom = np.asarray(self.pc.points)[self.selected_i[1]]
-
-            # Calculate the center of the ellipsoid (mean of the two selected points)
-            self.center_point = (z_top + z_bottom) / 2
-            # Calculate the vertical distance between the two points and define initial axes lengths
-            self.c_axis = np.linalg.norm(z_top - z_bottom)
-        elif len(self.selected_i) == 1:
-            self.center_point = np.asarray(self.pc.points)[self.selected_i[0]]
-        else:
-            raise ValueError("The number of selected points must be 1 or 2.")
-
-        # Define axes lengths
-        self.l_axes = [self.a_axis / 2, self.b_axis / 2, self.c_axis / 2]  # Semi-axes lengths
-
-        # Create a unit sphere and transform it into an ellipsoid
-        meshed_ellipsoid = o3d.geometry.TriangleMesh.create_sphere(radius=1.0, resolution=self.resolution)      # Create a unit sphere
-        meshed_ellipsoid.scale(1.0, meshed_ellipsoid.get_center())                                              # Ensure unit sphere scaling and center
-        scaling_matrix = np.diag([self.l_axes[0], self.l_axes[1], self.l_axes[2], 1.0])                         # Create the scaling matrix to transform the ellipsoid
-        meshed_ellipsoid.transform(scaling_matrix)                                                              # Transform the ellipsoid with the scaling matrix
-        meshed_ellipsoid.translate(self.center_point)                                                           # Translate the ellipsoid to center point calculated
-        
-        # Convert the mesh to wireframe using edges
+    def generate_ellipsoid_mesh(self):
+        meshed_ellipsoid = o3d.geometry.TriangleMesh.create_sphere(radius=1.0, resolution=self.resolution)
+        scaling_matrix = np.diag([self.semi_axes[0], self.semi_axes[1], self.semi_axes[2], 1.0])
+        meshed_ellipsoid.transform(scaling_matrix)
+        meshed_ellipsoid.translate(self.center_point)
         edges = np.array([[triangle[i], triangle[(i + 1) % 3]] for triangle in np.asarray(meshed_ellipsoid.triangles) for i in range(3)])
         unique_edges = np.unique(edges, axis=0)  # Remove duplicate edges
         lines = unique_edges.tolist()
@@ -80,8 +54,44 @@ class Ellipsoid(object):
         self.line_set.lines = o3d.utility.Vector2iVector(lines)
         self.line_set.paint_uniform_color([1, 0, 0])  # Red color for the wireframe
 
-        return self.line_set, self.center_point, self.l_axes
-    
+        return self.line_set, self.center_point, self.semi_axes
+
+    def update_ellipsoid(self):
+        def on_submit():
+            try:
+                for i in range(3):
+                    val = entries[i].get()
+                    if val.strip():
+                        new_val = float(val)
+                        self.semi_axes[i] = new_val
+            except ValueError:
+                print("invalide input. Keeping previous values.")
+            top.destroy()
+            
+        top = tk.Toplevel()
+        top.title("Update the ellipsoid axes")
+
+        entries = []
+
+        for i, name in enumerate(self.axis_labels):
+            tk.Label(top, text=f"{name.replace('_', '-')} :").grid(row=i, column=0, padx=5, pady=5)
+            entry = tk.Entry(top)
+            entry.insert(0, str(self.semi_axes[i]))
+            entry.grid(row=i, column=1, padx=5, pady=5)
+            entries.append(entry)
+
+        submit_btn = tk.Button(top, text="Valider", command=on_submit)
+        submit_btn.grid(row=3, column=0, columnspan=2, pady=10)
+
+        top.transient()  # pour rester au-dessus de la fenêtre principale
+        top.grab_set()
+        top.wait_window()
+
+        print(f"Updated ellipsoid with new semi-axes: "
+                f"a={self.semi_axes[0]}, b={self.semi_axes[1]}, c={self.semi_axes[2]}.")
+
+        return self.generate_ellipsoid_mesh()
+
     def filter_points(self) -> PointCloud:
         """
         Function to filter out the points located withing the ellipsoid.
@@ -94,9 +104,9 @@ class Ellipsoid(object):
         points = np.asarray(self.pc.points)
         relative_position = points - self.center_point
         normalized_distance = (
-            (relative_position[:, 0] / self.l_axes[0]) ** 2
-            + (relative_position[:, 1] / self.l_axes[1]) ** 2
-            + (relative_position[:, 2] / self.l_axes[2]) ** 2
+            (relative_position[:, 0] / self.semi_axes[0]) ** 2
+            + (relative_position[:, 1] / self.semi_axes[1]) ** 2
+            + (relative_position[:, 2] / self.semi_axes[2]) ** 2
         )
         mask = normalized_distance > 1.0
         filtered_points = points[mask]
@@ -104,34 +114,39 @@ class Ellipsoid(object):
         self.filtered_pc.points = o3d.utility.Vector3dVector(filtered_points)
         return self.filtered_pc
 
-
-if __name__ == "__main__":
-
-    # Importing the point cloud
-    point_cloud_name = "cross_section_3_45d_clean.ply"
-    parent_folder = "saved_clouds/"
-    point_cloud = o3d.io.read_point_cloud(parent_folder + point_cloud_name)
+def clean_cloud():
+    pcp_instance = CrossSection()
+    point_cloud = pcp_instance.load_cloud()
 
     while True:
-        # Select points
         print("Please select one or two points: ")
-        pcp_instance = PointCloudProcessor(pc=point_cloud)
-        selected_indices = pcp_instance.visualizer(window_name=point_cloud_name, geom1=point_cloud, save=False)
+        try:
+            selected_indices, _ = pcp_instance.visualizer(window_name=pcp_instance.pc_name, geom1=point_cloud, save=False)
+        except ValueError as e:
+            print("No points selected. The cloud is considered clean.")
+            break
+        selected_coords = [np.asarray(point_cloud.points)[i] for i in selected_indices]
 
         if not selected_indices:
             print("No points selected. The cloud is considered clean.")
             break
 
-        # Create ellipsoid based on the two points selected
-        ellipsoid_instance = Ellipsoid(pc=point_cloud, selected_i=selected_indices)
-        ellipsoid_instance.line_set, ellipsoid_instance.center_point, ellipsoid_instance.l_axes = ellipsoid_instance.create()
+        ellipsoid_instance = Ellipsoid(pc=point_cloud, selected_i=selected_indices, selected_coords=selected_coords)
+
+        if len(selected_indices) == 2:
+            ellipsoid_instance.line_set, ellipsoid_instance.center_point, ellipsoid_instance.semi_axes = ellipsoid_instance.ellipsoid_from_2_points()
+        
+        elif len(selected_indices) == 1:
+            ellipsoid_instance.line_set, ellipsoid_instance.center_point, ellipsoid_instance.semi_axes = ellipsoid_instance.ellipsoid_from_1_point()
+        
+        else:
+            raise ValueError("Number of selected points must be 1 or 2.")
 
         while True:
-            # Visualize the point cloud with the ellipsoid
-            pcp_instance.visualizer(window_name="Point Cloud with Ellipsoid", geom1=point_cloud, geom2=ellipsoid_instance.line_set)
-
             root = Tk()
             root.withdraw()
+
+            pcp_instance.visualizer(window_name="Point Cloud with Ellipsoid", geom1=point_cloud, geom2=ellipsoid_instance.line_set)
             user_input = messagebox.askyesnocancel("Validation", "Does the ellipsoid fit the points?")
 
             if user_input is True:
@@ -139,37 +154,31 @@ if __name__ == "__main__":
                 break
 
             elif user_input is False:
-                try:
-                    new_a_axis = simpledialog.askfloat("Input", "Enter new value for a-axis length:")
-                    new_b_axis = simpledialog.askfloat("Input", "Enter new value for b-axis length:")
-                    new_c_axis = 1.0
-                    if len(selected_indices) == 1:
-                        new_c_axis = simpledialog.askfloat("Input", "Enter new value for c-axis length:")
+                ellipsoid_instance.line_set, ellipsoid_instance.center_point, ellipsoid_instance.semi_axes = ellipsoid_instance.update_ellipsoid()
 
-                    ellipsoid_instance.a_axis = new_a_axis
-                    ellipsoid_instance.b_axis = new_b_axis
-                    ellipsoid_instance.c_axis = new_c_axis
-                    ellipsoid_instance.line_set, ellipsoid_instance.center_point, ellipsoid_instance.l_axes = ellipsoid_instance.create()
-
-                except Exception as e:
-                    print(f"An error occurred: {e}. Please enter valid numeric values.")
             elif user_input is None:
                 print("Operation canceled")
                 exit()
 
-        # Filter points inside the ellipsoid
         filtered_cloud = ellipsoid_instance.filter_points()
         point_cloud = filtered_cloud
 
     user_input_2 = messagebox.askyesnocancel("Save", "Do you want to save the cloud?")
+    
     if user_input_2 is True:
-        saved_point_cloud_name = simpledialog.askstring("Filename",
-                                                        "Name of the file with extension (e.g. Cloud.ply): ")
-        print("Saving filtered point cloud...")
-        o3d.io.write_point_cloud("saved_clouds/" + saved_point_cloud_name, point_cloud)
-        print("Filtered point cloud saved as " + saved_point_cloud_name + "'.")
+        ply_path = filedialog.asksaveasfilename(defaultextension=".ply", confirmoverwrite=True, filetypes=[("PLY files", "*.ply")])
+        filename = ply_path.split("/")[-1]
+        o3d.io.write_point_cloud(ply_path, point_cloud)
+        print("Filtered point cloud saved as " + filename)
+
     elif user_input_2 is False:
         print("Process complete.")
+
     elif user_input_2 is None:
         print("Operation canceled")
         exit()
+
+if __name__ == "__main__":
+    root = Tk()
+    root.withdraw()
+    clean_cloud()
