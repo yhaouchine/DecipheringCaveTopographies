@@ -3,7 +3,13 @@ import alphashape
 import logging
 import matplotlib.pyplot as plt
 import open3d as o3d
-from typing import Tuple, Optional, Union
+import tkinter as tk
+import time
+import os
+import geopandas as gpd
+import vtk
+from tkinter import filedialog, Tk, messagebox
+from typing import Tuple, Optional
 from open3d.cpu.pybind.geometry import PointCloud
 from concave_hull import concave_hull
 from sklearn.decomposition import PCA
@@ -38,21 +44,22 @@ class ContourExtractor:
         self.area: Optional[float] = None
         self.perimeter: Optional[float] = None
         self.roughness: Optional[float] = None
-        self.curvature : Optional[np.ndarray] = None
+        self.curvature: Optional[np.ndarray] = None
 
-    def load_cloud(self, pc_name: str, parent_folder: str):
+    def load_cloud(self):
         """
         Load a point cloud from a file using Open3D point cloud reading function.        
         """
 
-        self.pc_name = pc_name
-        self.parent_folder = parent_folder
         try:
-            self.original_cloud = o3d.io.read_point_cloud(f"{self.parent_folder}/{self.pc_name}")
-            self.points_3d = np.asarray(self.original_cloud.points)
+            pc_path = filedialog.askopenfilename(title="Select Point Cloud file", filetypes=[("Point Cloud files", "*.ply")])
+            self.pc_name = pc_path.split("/")[-1].split(".")[0]
             logger.info("")
+            start_time = time.perf_counter()
             logger.info(f"===== Loading point cloud {self.pc_name}... =====")
-            logger.info(f"Point cloud '{self.pc_name}' loaded successfully.")
+            self.original_cloud = o3d.io.read_point_cloud(pc_path)
+            self.points_3d = np.asarray(self.original_cloud.points)
+            print(f"Point cloud {pc_path} loaded successfuly in {time.perf_counter() - start_time:.4f} seconds")
         except Exception as e:
             logger.error(f"An error occurred while loading the point cloud: {e}")
             raise
@@ -128,7 +135,7 @@ class ContourExtractor:
 
     def _diagnose_pca(self, pca: PCA):
         """
-        Display a diagnosis of the Principal Component Analysis (PCA) results.
+        Display useful information on the Principal Component Analysis (PCA) results.
         
         Parameters:
         -----------
@@ -159,7 +166,7 @@ class ContourExtractor:
 
     def _visualize_pca(self, pca: PCA):
         """
-        Display a 3D and 2D visualization of the point cloud and its principal components.
+        Display a 3D and 2D-projected visualization of the point cloud and its principal components.
 
         Parameters:
         -----------
@@ -228,21 +235,31 @@ class ContourExtractor:
         plt.tight_layout()
         plt.show()
 
-    def convex_hull(self, alpha: float) -> Tuple[any, float]:
+    def alphashape_hull(self, alpha: float) -> Tuple[any, float]:
         """
-        Compute the alpha shape (convex hull) of a set of 2D points.
-        # TODO : check the documentations/function
+        Compute the alpha shape of a set of 2D points. The alpha shape is a geometric structure 
+        that captures the shape of a set of points in 2D space. 
+        
+        It is controlled by the `alpha` parameter, which determines the level of concavity of the 
+        resulting shape. Smaller values of `alpha` produce more concave shapes, while larger values 
+        approach the convex hull of the points.
+
         Parameters:
         -----------
-            - alpha: float
-                Controls the level of concavity (lower values = more concave, higher values = more convex).
-                If `alpha` is too small, the shape may be disconnected or disappear.
+        alpha : float
+            A positive value that controls the level of concavity of the alpha shape. 
+            - Lower values result in more detailed and concave shapes.
+            - Higher values result in smoother and more convex shapes.
+            - If `alpha` is too small, the resulting shape may become disconnected or disappear entirely.
         
         Returns:
         --------
-            - A tuple containing:
-                - The computed alpha shape as a `Polygon`, `MultiPolygon`, or `None` (if the computation fails).
-                - The time taken to compute the shape (in seconds).
+        Tuple[Union[Polygon, MultiPolygon, None], float]
+            - The computed alpha shape, which can be:
+                - A `Polygon` if the shape is a single connected region.
+                - A `MultiPolygon` if the shape consists of multiple disconnected regions.
+                - `None` if the computation fails or the shape cannot be determined.
+            - The time taken to compute the alpha shape, measured in seconds.
         """
 
         import time
@@ -264,33 +281,33 @@ class ContourExtractor:
 
     def concave_hull(self, length_threshold: float, c: float) -> Tuple[np.ndarray, float]:
         """
-            Compute the concave hull for a set of 2D points using a K-Nearest Neighbors (KNN) approach. 
-            (See https://github.com/cubao/concave_hull) 
+        Compute the concave hull for a set of 2D points using a K-Nearest Neighbors (KNN) approach. 
+        (See https://github.com/cubao/concave_hull) 
 
-            The concave hull is a polygon that more accurately follows the natural boundary of a point cloud
-            than the convex hull. Unlike the convex hull, which is the smallest convex polygon that encloses all
-            the points, the concave hull allows for indentations and concavities, providing a closer approximation
-            to the true shape of the data.
+        The concave hull is a polygon that more accurately follows the natural boundary of a point cloud
+        than the convex hull. Unlike the convex hull, which is the smallest convex polygon that encloses all
+        the points, the concave hull allows for indentations and concavities, providing a closer approximation
+        to the true shape of the data.
 
-            This implementation follows the principles described in the Concaveman algorithm
-            (see: https://github.com/mapbox/concaveman), and uses two main parameters to control the level
-            of detail of the resulting hull
-            
-            Parameters:
-            -----------
-                - concavity: float, optional (default=1.0)
-                    The concavity coefficient controlling the level of detail of the hull:
-                        - Values <= 1 yield a more detailed, concave shape. 
-                        - Values > 1 yield a smoother, more convex shape.
-                - length threshold (length_threshold): float, optional (default=0.0)
-                    The minimum edge length below which segments are ignored during the hull construction,
-                    which helps filter out edges caused by noise. The unit depends on the unit of the point cloud coordinates.
+        This implementation follows the principles described in the Concaveman algorithm
+        (see: https://github.com/mapbox/concaveman), and uses two main parameters to control the level
+        of detail of the resulting hull
+        
+        Parameters:
+        -----------
+            - concavity: float, optional (default=1.0)
+                The concavity coefficient controlling the level of detail of the hull:
+                    - Values <= 1 yield a more detailed, concave shape. 
+                    - Values > 1 yield a smoother, more convex shape.
+            - length threshold (length_threshold): float, optional (default=0.0)
+                The minimum edge length below which segments are ignored during the hull construction, which helps
+                filter out edges caused by noise. The unit depends on the unit of the point cloud coordinates.
 
-            Returns:
-            --------
-                - A tuple containing:
-                    - hull: A NumPy array of shape (m, 2) of the ordered vertices of the concave hull polygon.
-                    - time: A float representing the computation time in seconds.
+        Returns:
+        --------
+            - A tuple containing:
+                - hull: A NumPy array of shape (m, 2) of the ordered vertices of the concave hull polygon.
+                - time: A float representing the computation time in seconds.
         """
 
         import time
@@ -358,7 +375,6 @@ class ContourExtractor:
             logger.error(f"An error occurred while computing the area: {e}")
             raise
 
-
     def compute_roughness(self) -> float:
         """
         Compute the roughness of the contour as the standard deviation of the curvature at each point of the contour.
@@ -397,9 +413,9 @@ class ContourExtractor:
                 y.extend(yi)
         elif isinstance(self.contour, np.ndarray):
             # Extract x and y coordinates of the contour
-            x, y  = self.contour[:, 0], self.contour[:, 1]
+            x, y = self.contour[:, 0], self.contour[:, 1]
         else:
-            raise TypeError("Unsupported contour format for curvature compytation.")
+            raise TypeError("Unsupported contour format for curvature computation.")
 
         # Compute first derivatives
         dx = np.gradient(x)
@@ -413,7 +429,8 @@ class ContourExtractor:
         numerator = (dx * d2x - dy * d2y)
         denominator = (dx ** 2 + dy ** 2) ** (3 / 2)
         if np.any(denominator == 0):
-            logger.warning("!!!WARNING!!!  Denominator contains zero values, curvature may be undefined at some points.")
+            logger.warning(
+                "!!!WARNING!!!  Denominator contains zero values, curvature may be undefined at some points.")
             denominator[denominator == 0] = np.nan
         self.curvature = numerator / denominator
 
@@ -425,7 +442,7 @@ class ContourExtractor:
         self.roughness = np.std(self.curvature)
 
         return self.roughness
-    
+
     def display_contour(self):
         """
         Display the contour in the PCA plane along with the point cloud and the computed area and perimeter.
@@ -460,7 +477,7 @@ class ContourExtractor:
             coords = []
             for poly in self.contour.geoms:
                 coords.extend(poly.exterior.coords)
-                coords.append((None, None))  # Séparateur pour affichage (ex: matplotlib)
+                coords.append((None, None))
             coords = np.array(coords, dtype=object)
         elif isinstance(self.contour, np.ndarray):
             coords = self.contour
@@ -489,33 +506,31 @@ class ContourExtractor:
         plt.tight_layout()
         plt.show()
 
-    def extract(self, method: str, alpha: Optional[float] = None, concavity: Optional[float] = None,
+    def compute_hull(self, method: str, alpha: Optional[float] = None, concavity: Optional[float] = None,
                 length_threshold: Optional[float] = None):
         """
-        Extract the contour of the point cloud using either the convex or concave hull method.
-
-        # TODO: Update function (length threshold). Concavity could be mandatory too.
+        Compute the contour of the point cloud using either the convex or concave hull method.
 
         Parameters:
         -----------
             - method : str, optional (default='concave')
-                The method used to extract the contour. Choose between 'convex' or 'concave'.
+                The method used to extract the contour. Choose between 'alphashape' or 'concave'.
 
-            - alpha : float, optional (default=3.5)
-                The alpha parameter controlling the level of concavity in the convex hull method.
+            - alpha : float, optional (default=3.5), MANDATORY for alphashape method
+                The alpha parameter controlling the level of concavity in the alphashape_hull method.
 
-            - concavity : float, optional (default=None)
+            - concavity : float, optional (default=None), MANDATORY for concave method
                 The concavity coefficient controlling the level of detail of the hull in the concave hull method.
                 
-            - length_threshold : float, optional (default=None)
+            - length_threshold : float, optional (default=None), MANDATORY for concave method
                 The minimum edge length below which segments are ignored during the hull construction,
                 which helps filter out edges caused by noise.
         """
 
-        if method == 'convex':
+        if method == 'alphashape':
             if alpha is None:
                 raise ValueError("Alpha parameter must be provided for convex method.")
-            self.convex_hull(alpha=alpha)
+            self.alphashape_hull(alpha=alpha)
         elif method == 'concave':
             if concavity is None or length_threshold is None:
                 raise ValueError("Concavity and length_threshold must be provided for concave method.")
@@ -526,20 +541,174 @@ class ContourExtractor:
         logger.info("Hull extraction completed.")
         logger.info(f"Hull computing time: {self.durations:.4f} seconds")
         logger.info("")
-        self.display_contour()
 
-    def reconstruct_missing_points(self):
+    def save_contour(self):
         """
-        Reconstruct the missing points using interpolation algorithms.
+        Save the computed contour using a save file dialog.
+        Formats supported: csv, vtk
+        """
+        if self.contour is None:
+            raise ValueError("No contour has been computed yet.")
+
+        filetypes = [
+            ("CSV", "*.csv"),
+            ("VTK", "*.vtk"),
+        ]
+        filepath = filedialog.asksaveasfilename(
+            title="Save Contour As...",
+            defaultextension=".vtk",
+            filetypes=filetypes
+        )
+
+        if not filepath:
+            print("Saving cancelled.")
+            return
+
+        ext = os.path.splitext(filepath)[1].lower()
+
+        # Convert shapely Polygon/MultiPolygon to numpy coords
+        if isinstance(self.contour, (Polygon, MultiPolygon)):
+            coords = np.array(self.contour.exterior.coords)
+        elif isinstance(self.contour, np.ndarray):
+            coords = self.contour
+        else:
+            raise TypeError("Contour format not supported.")
+
+        if ext == ".csv":
+            np.savetxt(filepath, coords, delimiter=",", header="X,Y", comments='')
+            print(f"Saved as CSV: {filepath}")
+
+        elif ext == ".vtk":
+            points = vtk.vtkPoints()
+            polyline = vtk.vtkPolyLine()
+            polyline.GetPointIds().SetNumberOfIds(len(coords))
+            for i, (x, y) in enumerate(coords):
+                points.InsertNextPoint(x, y, 0.0)
+                polyline.GetPointIds().SetId(i, i)
+            cells = vtk.vtkCellArray()
+            cells.InsertNextCell(polyline)
+            poly_data = vtk.vtkPolyData()
+            poly_data.SetPoints(points)
+            poly_data.SetLines(cells)
+            writer = vtk.vtkPolyDataWriter()
+            writer.SetFileName(filepath)
+            writer.SetInputData(poly_data)
+            writer.Write()
+            print(f"Saved as VTK: {filepath}")
+
+        else:
+            print("Unsupported format.")
+
+
+
+    def update_contour(self):
+        """
+        Open a persistent window for updating contour parameters, allowing iterative recomputation and final save.
         """
 
+        def on_submit():
+            try:
+                method = method_var.get()
+                alpha = float(alpha_entry.get()) if method == "alphashape" else None
+                concavity = float(concavity_entry.get()) if method == "concave" else None
+                length_threshold = float(length_threshold_entry.get()) if method == "concave" else None
+
+                voxel_size_input = voxel_size_entry.get()
+                if not voxel_size_input.replace('.', '', 1).isdigit():
+                    raise ValueError("Voxel size must be a numeric value.")
+                voxel_size = float(voxel_size_input)
+                if voxel_size <= 0:
+                    raise ValueError("Voxel size must be a positive number.")
+
+                plt.close('all')
+                self.downsample(voxel_size=voxel_size)
+                self.pca_projection()
+                self.compute_hull(method=method, alpha=alpha, concavity=concavity, length_threshold=length_threshold)
+                self.display_contour()
+
+            except Exception as e:
+                messagebox.showerror("Error", f"Error during contour update: {e}")
+
+        def on_save():
+            if self.contour is not None:
+                self.save_contour()
+            else:
+                messagebox.showwarning("Warning", "No valid contour computed yet.")
+
+        def toggle_fields(*args):
+            if method_var.get() == "alphashape":
+                alpha_entry.config(state="normal")
+                concavity_entry.config(state="disabled")
+                length_threshold_entry.config(state="disabled")
+            elif method_var.get() == "concave":
+                alpha_entry.config(state="disabled")
+                concavity_entry.config(state="normal")
+                length_threshold_entry.config(state="normal")
+
+
+        # Créer la fenêtre persistante
+        param_window = tk.Toplevel()
+        param_window.title("Update Contour Parameters")
+        param_window.attributes("-topmost", True)
+
+        # Widgets
+        tk.Label(param_window, text="Method:").grid(row=0, column=0, sticky="w")
+        method_var = tk.StringVar(value="concave")
+        tk.OptionMenu(param_window, method_var, "alphashape", "concave").grid(row=0, column=1, sticky="w")
+
+        tk.Label(param_window, text="Alpha:").grid(row=1, column=0, sticky="w")
+        alpha_entry = tk.Entry(param_window)
+        alpha_entry.insert(0, "0.05")
+        alpha_entry.grid(row=1, column=1, sticky="w")
+
+        tk.Label(param_window, text="Concavity:").grid(row=2, column=0, sticky="w")
+        concavity_entry = tk.Entry(param_window)
+        concavity_entry.insert(0, "1.0")
+        concavity_entry.grid(row=2, column=1, sticky="w")
+
+        tk.Label(param_window, text="Length Threshold:").grid(row=3, column=0, sticky="w")
+        length_threshold_entry = tk.Entry(param_window)
+        length_threshold_entry.insert(0, "0.02")
+        length_threshold_entry.grid(row=3, column=1, sticky="w")
+
+        tk.Label(param_window, text="Voxel Size:").grid(row=4, column=0, sticky="w")
+        voxel_size_entry = tk.Entry(param_window)
+        voxel_size_entry.insert(0, "0.1")
+        voxel_size_entry.grid(row=4, column=1, sticky="w")
+
+        method_var.trace_add("write", toggle_fields)
+        toggle_fields()
+
+        # Boutons
+        submit_button = tk.Button(param_window, text="Update Contour", command=on_submit)
+        submit_button.grid(row=5, column=0, pady=10)
+
+        save_button = tk.Button(param_window, text="Close & Save", command=on_save)
+        save_button.grid(row=5, column=1, pady=10)
+
+        param_window.transient()
+        param_window.grab_set()
+        param_window.wait_window()
+    
+
+def extract_contour(method: str, voxel_size: float, alpha: float, concavity: float, length_threshold: float, 
+                    diagnose: bool = False, visualize: bool = False):
+
+    root = Tk()
+    root.withdraw()
+    cloud = ContourExtractor()
+    cloud.load_cloud()
+    cloud.downsample(voxel_size=voxel_size)
+    cloud.pca_projection(diagnosis=diagnose, visualize=visualize)
+    cloud.compute_hull(method=method, alpha=alpha, concavity=concavity, length_threshold=length_threshold)
+    cloud.display_contour()
+    cloud.update_contour()
+    
 
 if __name__ == "__main__":
-    cloud_name = "developed_section.ply"
-    cloud_location = "saved_clouds"
-
-    voxel_size = 0.01
-    method = 'concave'  # 'convex' or 'concave'
+    
+    voxel_size = 0.1
+    method = 'concave'  # 'alphashape' or 'concave'
 
     alpha = 0.05
     concavity = 1.0
@@ -548,8 +717,4 @@ if __name__ == "__main__":
     diagnose = False
     visualize = False
 
-    cloud = ContourExtractor()
-    cloud.load_cloud(pc_name=cloud_name, parent_folder=cloud_location)
-    cloud.downsample(voxel_size=voxel_size)
-    cloud.pca_projection(diagnosis=diagnose, visualize=visualize)
-    cloud.extract(method=method, alpha=alpha, concavity=concavity, length_threshold=length_threshold)
+    extract_contour(method=method, voxel_size=voxel_size, alpha=alpha, concavity=concavity, length_threshold=length_threshold)    
