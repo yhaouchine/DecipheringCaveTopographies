@@ -6,9 +6,8 @@ import open3d as o3d
 import tkinter as tk
 import time
 import os
-import geopandas as gpd
 import vtk
-from tkinter import filedialog, Tk, messagebox
+from tkinter import filedialog, Tk, messagebox, ttk
 from typing import Tuple, Optional
 from open3d.cpu.pybind.geometry import PointCloud
 from concave_hull import concave_hull
@@ -599,8 +598,6 @@ class ContourExtractor:
         else:
             print("Unsupported format.")
 
-
-
     def update_contour(self):
         """
         Open a persistent window for updating contour parameters, allowing iterative recomputation and final save.
@@ -646,51 +643,77 @@ class ContourExtractor:
                 length_threshold_entry.config(state="normal")
 
 
-        # Créer la fenêtre persistante
+        # Main window
         param_window = tk.Toplevel()
         param_window.title("Update Contour Parameters")
         param_window.attributes("-topmost", True)
+        param_window.configure(padx=20, pady=20)
+        param_window.columnconfigure(0, weight=1)
+
+        # Style
+        style = ttk.Style()
+        style.configure("TLabel", font=("Segoe UI", 10))
+        style.configure("TEntry", font=("Segoe UI", 10))
+        style.configure("TButton", font=("Segoe UI", 10, "bold"))
+        style.configure("TFrame", background="white")
+
+        # Frame
+        frame = ttk.LabelFrame(param_window, text="Contour Parameters", padding=(15, 10))
+        frame.grid(row=0, column=0, columnspan=2, sticky="ew")
+        frame.columnconfigure(0, weight=1)
+        frame.columnconfigure(1, weight=1)
 
         # Widgets
-        tk.Label(param_window, text="Method:").grid(row=0, column=0, sticky="w")
+        ttk.Label(frame, text="Method:").grid(row=0, column=0, sticky="w", pady=5)
         method_var = tk.StringVar(value="concave")
-        tk.OptionMenu(param_window, method_var, "alphashape", "concave").grid(row=0, column=1, sticky="w")
+        method_combo = ttk.Combobox(frame, textvariable=method_var, values=["alphashape", "concave"], state="readonly")
+        method_combo.grid(row=0, column=1, sticky="ew", pady=5)
 
-        tk.Label(param_window, text="Alpha:").grid(row=1, column=0, sticky="w")
-        alpha_entry = tk.Entry(param_window)
+        ttk.Label(frame, text="Alpha:").grid(row=1, column=0, sticky="w", pady=5)
+        alpha_entry = ttk.Entry(frame)
         alpha_entry.insert(0, "0.05")
-        alpha_entry.grid(row=1, column=1, sticky="w")
+        alpha_entry.grid(row=1, column=1, sticky="ew", pady=5)
 
-        tk.Label(param_window, text="Concavity:").grid(row=2, column=0, sticky="w")
-        concavity_entry = tk.Entry(param_window)
+        ttk.Label(frame, text="Concavity:").grid(row=2, column=0, sticky="w", pady=5)
+        concavity_entry = ttk.Entry(frame)
         concavity_entry.insert(0, "1.0")
-        concavity_entry.grid(row=2, column=1, sticky="w")
+        concavity_entry.grid(row=2, column=1, sticky="ew", pady=5)
 
-        tk.Label(param_window, text="Length Threshold:").grid(row=3, column=0, sticky="w")
-        length_threshold_entry = tk.Entry(param_window)
+        ttk.Label(frame, text="Length Threshold:").grid(row=3, column=0, sticky="w", pady=5)
+        length_threshold_entry = ttk.Entry(frame)
         length_threshold_entry.insert(0, "0.02")
-        length_threshold_entry.grid(row=3, column=1, sticky="w")
+        length_threshold_entry.grid(row=3, column=1, sticky="ew", pady=5)
 
-        tk.Label(param_window, text="Voxel Size:").grid(row=4, column=0, sticky="w")
-        voxel_size_entry = tk.Entry(param_window)
+        ttk.Label(frame, text="Voxel Size:").grid(row=4, column=0, sticky="w", pady=5)
+        voxel_size_entry = ttk.Entry(frame)
         voxel_size_entry.insert(0, "0.1")
-        voxel_size_entry.grid(row=4, column=1, sticky="w")
+        voxel_size_entry.grid(row=4, column=1, sticky="ew", pady=5)
+
+        # Make entries expand if window is resized
+        for i in range(2):
+            frame.columnconfigure(i, weight=1)
 
         method_var.trace_add("write", toggle_fields)
         toggle_fields()
 
-        # Boutons
-        submit_button = tk.Button(param_window, text="Update Contour", command=on_submit)
-        submit_button.grid(row=5, column=0, pady=10)
+        # Buttons
+        button_frame = ttk.Frame(param_window)
+        button_frame.grid(row=1, column=0, pady=15, sticky="ew")
 
-        save_button = tk.Button(param_window, text="Close & Save", command=on_save)
-        save_button.grid(row=5, column=1, pady=10)
+        update_button = ttk.Button(button_frame, text="Update Contour", command=on_submit)
+        update_button.grid(row=0, column=0, padx=5)
+
+        save_button = ttk.Button(button_frame, text="Save", command=on_save)
+        save_button.grid(row=0, column=1, padx=5)
+
+        button_frame.columnconfigure(0, weight=1)
+        button_frame.columnconfigure(1, weight=1)
 
         param_window.transient()
         param_window.grab_set()
+        param_window.lift()
         param_window.wait_window()
     
-
 def extract_contour(method: str, voxel_size: float, alpha: float, concavity: float, length_threshold: float, 
                     diagnose: bool = False, visualize: bool = False):
 
