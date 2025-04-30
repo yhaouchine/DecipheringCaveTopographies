@@ -17,6 +17,239 @@ from scipy.spatial import KDTree
 
 logger = logging.getLogger(__name__)
 
+class UserInterface:
+    def __init__(self, master, controller):
+        self.master = master
+        self.controller = controller
+
+        # Tk variables
+        self.method_var = tk.StringVar(value="concave")
+        self.poisson_enabled_var = tk.BooleanVar(value=False)
+        self.densification_enabled_var = tk.BooleanVar(value=False)
+        self.densification_method_var = tk.StringVar(value="linear")
+
+        # Build UI
+        self._init_window()
+        self._create_contour_frame()
+        self._create_poisson_frame()
+        self._create_densification_frame()
+        self._create_button_frame()
+        self._bind_traces()
+        self._set_initial_states()
+
+        # Block until window is closed
+        self.window.wait_window()
+
+    def _init_window(self):
+        self.window = tk.Toplevel(self.master)
+        self.window.title("Update Parameters")
+        self.window.attributes("-topmost", True)
+        self.window.configure(padx=20, pady=20)
+        for col in (0,1):
+            self.window.columnconfigure(col, weight=1)
+        self.window.transient()
+        self.window.grab_set()
+        self.window.lift()
+
+    def _create_contour_frame(self):
+        frame = ttk.LabelFrame(self.window, text="Contour Parameters", padding=(15,10))
+        frame.grid(row=0, column=0, columnspan=2, sticky="ew", pady=5)
+        for col in (0,1): frame.columnconfigure(col, weight=1)
+
+        ttk.Label(frame, text="Method:").grid(row=0, column=0, sticky="w", pady=5)
+        self.method_combo = ttk.Combobox(frame, textvariable=self.method_var,
+                                         values=["alphashape", "concave"], state="readonly")
+        self.method_combo.grid(row=0, column=1, sticky="ew", pady=5)
+
+        ttk.Label(frame, text="Alpha:").grid(row=1, column=0, sticky="w", pady=5)
+        self.alpha_entry = ttk.Entry(frame); self.alpha_entry.insert(0, "0.05")
+        self.alpha_entry.grid(row=1, column=1, sticky="ew", pady=5)
+
+        ttk.Label(frame, text="Concavity:").grid(row=2, column=0, sticky="w", pady=5)
+        self.concavity_entry = ttk.Entry(frame); self.concavity_entry.insert(0, "1.0")
+        self.concavity_entry.grid(row=2, column=1, sticky="ew", pady=5)
+
+        ttk.Label(frame, text="Length Threshold:").grid(row=3, column=0, sticky="w", pady=5)
+        self.length_threshold_entry = ttk.Entry(frame); self.length_threshold_entry.insert(0, "0.02")
+        self.length_threshold_entry.grid(row=3, column=1, sticky="ew", pady=5)
+
+        ttk.Label(frame, text="Voxel Size:").grid(row=4, column=0, sticky="w", pady=5)
+        self.voxel_size_entry = ttk.Entry(frame); self.voxel_size_entry.insert(0, "0.1")
+        self.voxel_size_entry.grid(row=4, column=1, sticky="ew", pady=5)
+
+    def _create_poisson_frame(self):
+        frame = ttk.LabelFrame(self.window, text="Poisson Parameters", padding=(15,10))
+        frame.grid(row=1, column=0, columnspan=2, sticky="ew", pady=5)
+        for col in (0,1): frame.columnconfigure(col, weight=1)
+
+        ttk.Checkbutton(frame, text="Poisson reconstruction",
+                        variable=self.poisson_enabled_var,
+                        command=self._toggle_poisson_fields).grid(
+            row=0, column=0, columnspan=2, sticky="w", pady=(0,10)
+        )
+
+        ttk.Label(frame, text="Depth:").grid(row=1, column=0, sticky="w", pady=5)
+        self.depth_entry = ttk.Entry(frame); self.depth_entry.insert(0, "8")
+        self.depth_entry.grid(row=1, column=1, sticky="ew", pady=5)
+
+        ttk.Label(frame, text="Scale:").grid(row=2, column=0, sticky="w", pady=5)
+        self.scale_entry = ttk.Entry(frame); self.scale_entry.insert(0, "2.0")
+        self.scale_entry.grid(row=2, column=1, sticky="ew", pady=5)
+
+        ttk.Label(frame, text="Density threshold:").grid(row=3, column=0, sticky="w", pady=5)
+        self.density_threshold_entry = ttk.Entry(frame); self.density_threshold_entry.insert(0, "0.02")
+        self.density_threshold_entry.grid(row=3, column=1, sticky="ew", pady=5)
+
+        ttk.Label(frame, text="Number of points:").grid(row=4, column=0, sticky="w", pady=5)
+        self.nb_points_entry = ttk.Entry(frame); self.nb_points_entry.insert(0, "5000")
+        self.nb_points_entry.grid(row=4, column=1, sticky="ew", pady=5)
+
+    def _create_densification_frame(self):
+        frame = ttk.LabelFrame(self.window, text="Densification Parameters", padding=(15,10))
+        frame.grid(row=2, column=0, columnspan=2, sticky="ew", pady=5)
+        for col in (0,1): frame.columnconfigure(col, weight=1)
+
+        ttk.Checkbutton(frame, text="Contour densification",
+                        variable=self.densification_enabled_var,
+                        command=self._toggle_densification_fields).grid(
+            row=0, column=0, columnspan=2, sticky="w", pady=(0,10)
+        )
+
+        ttk.Label(frame, text="Method:").grid(row=1, column=0, sticky="w", pady=5)
+        self.densification_method_combo = ttk.Combobox(
+            frame, textvariable=self.densification_method_var,
+            values=["linear", "cubicspline"], state="disabled"
+        )
+        self.densification_method_combo.grid(row=1, column=1, sticky="ew", pady=5)
+        self.densification_method_combo.bind(
+            "<<ComboboxSelected>>", lambda e: self._toggle_densification_fields()
+        )
+
+        ttk.Label(frame, text="Max segment length:").grid(row=2, column=0, sticky="w", pady=5)
+        self.segment_length_entry = ttk.Entry(frame); self.segment_length_entry.insert(0, "0.01")
+        self.segment_length_entry.grid(row=2, column=1, sticky="ew", pady=5)
+
+        ttk.Label(frame, text="Max hole gap:").grid(row=3, column=0, sticky="w", pady=5)
+        self.hole_gap_entry = ttk.Entry(frame); self.hole_gap_entry.insert(0, "1.0")
+        self.hole_gap_entry.grid(row=3, column=1, sticky="ew", pady=5)
+
+        ttk.Label(frame, text="Window:").grid(row=4, column=0, sticky="w", pady=5)
+        self.window_entry = ttk.Entry(frame); self.window_entry.insert(0, "3")
+        self.window_entry.grid(row=4, column=1, sticky="ew", pady=5)
+
+    def _create_button_frame(self):
+        frame = ttk.Frame(self.window)
+        frame.grid(row=3, column=0, columnspan=2, pady=15, sticky="ew")
+        for col in (0,1): frame.columnconfigure(col, weight=1)
+
+        ttk.Button(frame, text="Update Contour", command=self._on_submit).grid(row=0, column=0, padx=5)
+        ttk.Button(frame, text="Save", command=self._on_save).grid(row=0, column=1, padx=5)
+
+    def _bind_traces(self):
+        self.method_var.trace_add("write", lambda *args: self._toggle_method_fields())
+        self.poisson_enabled_var.trace_add("write", lambda *args: self._toggle_poisson_fields())
+        self.densification_enabled_var.trace_add("write", lambda *args: self._toggle_densification_fields())
+
+    def _set_initial_states(self):
+        self._toggle_method_fields()
+        self._toggle_poisson_fields()
+        self._toggle_densification_fields()
+
+    def _toggle_method_fields(self):
+        if self.method_var.get() == "alphashape":
+            self.alpha_entry.config(state="normal")
+            self.concavity_entry.config(state="disabled")
+            self.length_threshold_entry.config(state="disabled")
+        else:
+            self.alpha_entry.config(state="disabled")
+            self.concavity_entry.config(state="normal")
+            self.length_threshold_entry.config(state="normal")
+
+    def _toggle_poisson_fields(self):
+        state = "normal" if self.poisson_enabled_var.get() else "disabled"
+        self.depth_entry.config(state=state)
+        self.scale_entry.config(state=state)
+        self.density_threshold_entry.config(state=state)
+        self.nb_points_entry.config(state=state)
+
+    def _toggle_densification_fields(self):
+        if self.densification_enabled_var.get():
+            self.densification_method_combo.config(state="readonly")
+            self.segment_length_entry.config(state="normal")
+            self.hole_gap_entry.config(state="normal")
+            if self.densification_method_var.get() == "cubicspline":
+                self.window_entry.config(state="normal")
+            else:
+                self.window_entry.config(state="disabled")
+        else:
+            self.densification_method_combo.config(state="disabled")
+            self.segment_length_entry.config(state="disabled")
+            self.hole_gap_entry.config(state="disabled")
+            self.window_entry.config(state="disabled")
+
+    def _on_submit(self):
+        try:
+            method = self.method_var.get()
+            alpha = float(self.alpha_entry.get()) if method == "alphashape" else None
+            concavity = float(self.concavity_entry.get()) if method == "concave" else None
+            length_threshold = float(self.length_threshold_entry.get()) if method == "concave" else None
+
+            voxel_str = self.voxel_size_entry.get()
+            if not voxel_str.replace('.', '', 1).isdigit():
+                raise ValueError("Voxel size must be numeric.")
+            voxel_size = float(voxel_str)
+            if voxel_size <= 0:
+                raise ValueError("Voxel size must be positive.")
+
+            depth = int(self.depth_entry.get())
+            scale = float(self.scale_entry.get())
+            density = float(self.density_threshold_entry.get())
+            nb_pts = int(self.nb_points_entry.get())
+
+            dens_method = self.densification_method_var.get()
+            max_gap = float(self.hole_gap_entry.get())
+            max_len = float(self.segment_length_entry.get())
+            window = int(self.window_entry.get())
+
+            # Execute pipeline
+            plt.close('all')
+            self.controller.downsample(voxel_size=voxel_size)
+            if self.poisson_enabled_var.get():
+                self.controller.fill_holes_poisson(
+                    depth=depth, scale=scale,
+                    density_threshold_quantile=density,
+                    target_number_of_points=nb_pts
+                )
+            self.controller.pca_projection()
+
+            sorted_pts = sort_by_chain(self.controller.projected_points)
+            if self.densification_enabled_var.get():
+                self.controller.projected_points = self.controller.densify_contour(
+                    contour=sorted_pts,
+                    densification_method=dens_method,
+                    max_segment_length=max_len,
+                    max_allowed_gap=max_gap,
+                    window=window
+                )
+            else:
+                self.controller.projected_points = sorted_pts
+
+            self.controller.compute_hull(
+                method=method,
+                alpha=alpha,
+                concavity=concavity,
+                length_threshold=length_threshold
+            )
+            self.controller.display_contour()
+
+        except Exception as e:
+            messagebox.showerror("Error during contour update", str(e))
+
+    def _on_save(self):
+        if self.controller.contour is None:
+            messagebox.showwarning("Warning", "No valid contour computed yet.")
+        else:
+            self.controller.save_contour()
 
 class ContourExtractor:
     def __init__(self):
@@ -600,235 +833,8 @@ class ContourExtractor:
         else:
             print("Unsupported format.")
 
-    def update_contour(self):
-        """
-        Open a persistent window for updating contour parameters, allowing iterative recomputation and final save.
-        """
-
-        def on_submit():
-            try:
-                method = method_var.get()
-                alpha = float(alpha_entry.get()) if method == "alphashape" else None
-                concavity = float(concavity_entry.get()) if method == "concave" else None
-                length_threshold = float(length_threshold_entry.get()) if method == "concave" else None
-                depth = int(depth_entry.get())
-                scale = float(scale_entry.get())
-                density_threshold = float(density_threshold_entry.get())
-                nb_points = int(nb_points_entry.get())
-                voxel_size_input = voxel_size_entry.get()
-                dens_method = densification_method_var.get()
-                max_hole_gap = float(hole_gap_entry.get())
-                max_segment_length = float(segment_length_entry.get())
-                window = int(window_entry.get())
-
-                if not voxel_size_input.replace('.', '', 1).isdigit():
-                    raise ValueError("Voxel size must be a numeric value.")
-                voxel_size = float(voxel_size_input)
-                if voxel_size <= 0:
-                    raise ValueError("Voxel size must be a positive number.")
-
-                plt.close('all')
-                self.downsample(voxel_size=voxel_size)
-                if poisson_enabled_var.get():
-                    self.fill_holes_poisson(
-                        depth=depth,
-                        scale=scale,
-                        density_threshold_quantile=density_threshold,
-                        target_number_of_points=nb_points
-                    )
-                self.pca_projection()
-
-                sorted_pts = sort_by_chain(contour=self.projected_points)
-                if densification_enabled_var.get():
-                    self.projected_points = self.densify_contour(
-                        contour=sorted_pts,
-                        densification_method=dens_method,
-                        max_segment_length=max_segment_length,
-                        max_allowed_gap=max_hole_gap,
-                        window=window
-                    )
-                else:
-                    self.projected_points = sorted_pts
-
-                self.compute_hull(
-                    method=method,
-                    alpha=alpha,
-                    concavity=concavity,
-                    length_threshold=length_threshold
-                )
-                self.display_contour()
-
-            except Exception as e:
-                messagebox.showerror("Error", f"Error during contour update: {e}")
-
-        def on_save():
-            if self.contour is not None:
-                self.save_contour()
-            else:
-                messagebox.showwarning("Warning", "No valid contour computed yet.")
-
-        def toggle_fields(*args):
-            if method_var.get() == "alphashape":
-                alpha_entry.config(state="normal")
-                concavity_entry.config(state="disabled")
-                length_threshold_entry.config(state="disabled")
-            else:
-                alpha_entry.config(state="disabled")
-                concavity_entry.config(state="normal")
-                length_threshold_entry.config(state="normal")
-
-        # Poisson toggle
-        poisson_enabled_var = tk.BooleanVar(value=False)
-        def toggle_poisson_fields(*args):
-            state = "normal" if poisson_enabled_var.get() else "disabled"
-            depth_entry.config(state=state)
-            scale_entry.config(state=state)
-            density_threshold_entry.config(state=state)
-            nb_points_entry.config(state=state)
-
-        # Densification toggle
-        densification_enabled_var = tk.BooleanVar(value=False)
-        def toggle_densification_fields(*args):
-            if densification_enabled_var.get():
-                densification_method_combo.config(state="readonly")
-                segment_length_entry.config(state="normal")
-                hole_gap_entry.config(state="normal")
-                if densification_method_var.get() == "cubicspline":
-                    window_entry.config(state="normal")
-                else:
-                    window_entry.config(state="disabled")
-            else:
-                densification_method_combo.config(state="disabled")
-                segment_length_entry.config(state="disabled")
-                hole_gap_entry.config(state="disabled")
-                window_entry.config(state="disabled")
-
-        # Main window
-        param_window = tk.Toplevel()
-        param_window.title("Update Parameters")
-        param_window.attributes("-topmost", True)
-        param_window.configure(padx=20, pady=20)
-        for col in (0, 1): param_window.columnconfigure(col, weight=1)
-
-        style = ttk.Style()
-        style.configure("TLabel", font=("Segoe UI", 10))
-        style.configure("TEntry", font=("Segoe UI", 10))
-        style.configure("TButton", font=("Segoe UI", 10, "bold"))
-
-        # Contour frame
-        contour_frame = ttk.LabelFrame(param_window, text="Contour Parameters", padding=(15, 10))
-        contour_frame.grid(row=0, column=0, columnspan=2, sticky="ew", pady=5)
-        for col in (0, 1): contour_frame.columnconfigure(col, weight=1)
-
-        ttk.Label(contour_frame, text="Method:").grid(row=0, column=0, sticky="w", pady=5)
-        method_var = tk.StringVar(value="concave")
-        method_combo = ttk.Combobox(contour_frame, textvariable=method_var,
-                                    values=["alphashape", "concave"], state="readonly")
-        method_combo.grid(row=0, column=1, sticky="ew", pady=5)
-
-        ttk.Label(contour_frame, text="Alpha:").grid(row=1, column=0, sticky="w", pady=5)
-        alpha_entry = ttk.Entry(contour_frame); alpha_entry.insert(0, "0.05")
-        alpha_entry.grid(row=1, column=1, sticky="ew", pady=5)
-
-        ttk.Label(contour_frame, text="Concavity:").grid(row=2, column=0, sticky="w", pady=5)
-        concavity_entry = ttk.Entry(contour_frame); concavity_entry.insert(0, "1.0")
-        concavity_entry.grid(row=2, column=1, sticky="ew", pady=5)
-
-        ttk.Label(contour_frame, text="Length Threshold:").grid(row=3, column=0, sticky="w", pady=5)
-        length_threshold_entry = ttk.Entry(contour_frame); length_threshold_entry.insert(0, "0.02")
-        length_threshold_entry.grid(row=3, column=1, sticky="ew", pady=5)
-
-        ttk.Label(contour_frame, text="Voxel Size:").grid(row=4, column=0, sticky="w", pady=5)
-        voxel_size_entry = ttk.Entry(contour_frame); voxel_size_entry.insert(0, "0.1")
-        voxel_size_entry.grid(row=4, column=1, sticky="ew", pady=5)
-
-        # Poisson frame
-        poisson_frame = ttk.LabelFrame(param_window, text="Poisson Parameters", padding=(15, 10))
-        poisson_frame.grid(row=1, column=0, columnspan=2, sticky="ew", pady=5)
-        for col in (0, 1): poisson_frame.columnconfigure(col, weight=1)
-
-        poisson_checkbox = ttk.Checkbutton(poisson_frame, text="Poisson reconstruction",
-                                        variable=poisson_enabled_var,
-                                        command=toggle_poisson_fields)
-        poisson_checkbox.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 10))
-
-        ttk.Label(poisson_frame, text="Depth:").grid(row=1, column=0, sticky="w", pady=5)
-        depth_entry = ttk.Entry(poisson_frame); depth_entry.insert(0, "8")
-        depth_entry.grid(row=1, column=1, sticky="ew", pady=5)
-
-        ttk.Label(poisson_frame, text="Scale:").grid(row=2, column=0, sticky="w", pady=5)
-        scale_entry = ttk.Entry(poisson_frame); scale_entry.insert(0, "2.0")
-        scale_entry.grid(row=2, column=1, sticky="ew", pady=5)
-
-        ttk.Label(poisson_frame, text="Density threshold:").grid(row=3, column=0, sticky="w", pady=5)
-        density_threshold_entry = ttk.Entry(poisson_frame); density_threshold_entry.insert(0, "0.02")
-        density_threshold_entry.grid(row=3, column=1, sticky="ew", pady=5)
-
-        ttk.Label(poisson_frame, text="Number of points:").grid(row=4, column=0, sticky="w", pady=5)
-        nb_points_entry = ttk.Entry(poisson_frame); nb_points_entry.insert(0, "5000")
-        nb_points_entry.grid(row=4, column=1, sticky="ew", pady=5)
-
-        # Densification frame
-        densification_frame = ttk.LabelFrame(param_window, text="Densification Parameters", padding=(15, 10))
-        densification_frame.grid(row=2, column=0, columnspan=2, sticky="ew", pady=5)
-        for col in (0, 1): densification_frame.columnconfigure(col, weight=1)
-
-        densification_checkbox = ttk.Checkbutton(densification_frame, text="Contour densification",
-                                                variable=densification_enabled_var,
-                                                command=toggle_densification_fields)
-        densification_checkbox.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 10))
-
-        ttk.Label(densification_frame, text="Method:").grid(row=1, column=0, sticky="w", pady=5)
-        densification_method_var = tk.StringVar(value="linear")
-        densification_method_combo = ttk.Combobox(
-            densification_frame,
-            textvariable=densification_method_var,
-            values=["linear", "cubicspline"],
-            state="disabled"
-        )
-        densification_method_combo.grid(row=1, column=1, sticky="ew", pady=5)
-        densification_method_combo.bind("<<ComboboxSelected>>", lambda e: toggle_densification_fields())
-
-        ttk.Label(densification_frame, text="Max segment length:").grid(row=2, column=0, sticky="w", pady=5)
-        segment_length_entry = ttk.Entry(densification_frame); segment_length_entry.insert(0, "0.01")
-        segment_length_entry.grid(row=2, column=1, sticky="ew", pady=5)
-
-        ttk.Label(densification_frame, text="Max hole gap:").grid(row=3, column=0, sticky="w", pady=5)
-        hole_gap_entry = ttk.Entry(densification_frame); hole_gap_entry.insert(0, "1.0")
-        hole_gap_entry.grid(row=3, column=1, sticky="ew", pady=5)
-
-        ttk.Label(densification_frame, text="Window:").grid(row=4, column=0, sticky="w", pady=5)
-        window_entry = ttk.Entry(densification_frame); window_entry.insert(0, "3")
-        window_entry.grid(row=4, column=1, sticky="ew", pady=5)
-
-        # Traces pour mise à jour dynamique
-        method_var.trace_add("write", toggle_fields)
-        poisson_enabled_var.trace_add("write", toggle_poisson_fields)
-        densification_enabled_var.trace_add("write", toggle_densification_fields)
-
-        # Initial state update
-        toggle_fields()
-        toggle_poisson_fields()
-        toggle_densification_fields()
-
-        # Buttons
-        button_frame = ttk.Frame(param_window)
-        button_frame.grid(row=3, column=0, columnspan=2, pady=15, sticky="ew")
-
-        update_button = ttk.Button(button_frame, text="Update Contour", command=on_submit)
-        update_button.grid(row=0, column=0, padx=5)
-
-        save_button = ttk.Button(button_frame, text="Save", command=on_save)
-        save_button.grid(row=0, column=1, padx=5)
-
-        for col in (0, 1): button_frame.columnconfigure(col, weight=1)
-
-        param_window.transient()
-        param_window.grab_set()
-        param_window.lift()
-        param_window.wait_window()
-
-
+    def update_contour(self, root):
+        UserInterface(master=root, controller=self)
 
     def fill_holes_poisson(self,depth: int = 8,width: int = 0,scale: float = 1.0,linear_fit: bool = False,density_threshold_quantile: float = 0.02,target_number_of_points: int = 5000):
         """
@@ -900,8 +906,6 @@ class ContourExtractor:
         self.points_2d = np.array(densified)
         return self.points_2d
 
-
-
 def spline_interpolate_segment(contour: np.ndarray, i1: int, i2: int, n_points: int = 10, window: int = 3) -> np.ndarray:
     """
     Interpolation entre deux points d’un contour à l’aide d’une spline construite localement.
@@ -946,8 +950,6 @@ def sort_by_chain(contour: np.ndarray) -> np.ndarray:
 
     return contour[order]
 
-
-
 def extract_contour(method: str, voxel_size: float, alpha: float, concavity: float, length_threshold: float,
                     diagnose: bool = False, visualize: bool = False):
     root = Tk()
@@ -956,21 +958,17 @@ def extract_contour(method: str, voxel_size: float, alpha: float, concavity: flo
     cloud.load_cloud()
     cloud.downsample(voxel_size=voxel_size)
     cloud.pca_projection(diagnosis=diagnose, visualize=visualize)
-    # sorted_contour = sort_by_chain(contour=cloud.projected_points)
-    # cloud.projected_points = cloud.densify_contour(contour=sorted_contour, densification_method="linear")
     cloud.compute_hull(method=method, alpha=alpha, concavity=concavity, length_threshold=length_threshold)
     cloud.display_contour()
-    cloud.update_contour()
+    cloud.update_contour(root=root)
 
 if __name__ == "__main__":
     voxel_size = 0.01
     method = 'concave'  # 'alphashape' or 'concave'
-
     alpha = 0.05
     concavity = 1.0
     length_threshold = 0.02
-
     diagnose = False
     visualize = False
 
-    extract_contour(method=method, voxel_size=voxel_size, alpha=alpha, concavity=concavity, length_threshold=length_threshold)    
+    extract_contour(method=method, voxel_size=voxel_size, alpha=alpha, concavity=concavity, length_threshold=length_threshold)
