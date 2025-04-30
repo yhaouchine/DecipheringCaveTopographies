@@ -294,6 +294,30 @@ class CrossSection:
 
         return self.cross_section
 
+    def develop_section(self):
+        # compute cumulative distance along the densified line
+        deltas = np.linalg.norm(np.diff(self.interpolated_line, axis=0), axis=1)
+        cumdist = np.hstack([[0], np.cumsum(deltas)])
+        # project each section point
+        developed = []
+        tree_line = cKDTree(self.interpolated_line[:, :2])
+        dists, idxs = tree_line.query(self.section[:, :2])
+        for pt, i in zip(self.section, idxs):
+            developed.append([cumdist[i], pt[2]])  # X: distance, Y: Z
+        self.developed = np.array(developed)
+
+    def show_developed(self):
+        if self.developed is None:
+            raise ValueError("Developed section not computed yet.")
+        plt.figure(figsize=(12,6))
+        plt.scatter(self.developed[:,0], self.developed[:,1], s=1)
+        plt.xlabel('Distance déroulée (m)')
+        plt.ylabel('Altitude Z (m)')
+        plt.title('Coupe développée (Z vs. distance)')
+        plt.axis('equal')
+        plt.show()
+
+
 def extract_cross_section(tolerance: float):
     o3d.visualization.gui.Application.instance.initialize()
     pcp_instance = CrossSection()
@@ -302,7 +326,9 @@ def extract_cross_section(tolerance: float):
     pcp_instance.sort_points()
     pcp_instance.interpolate_line(auto_resolution=True, resolution=0.005)
     pcp_instance.extract_section(tolerance=tolerance)
-    #pcp_instance.display_section(pcp_instance.section)
+    pcp_instance.develop_section()
+    pcp_instance.show_developed()
+    pcp_instance.display_section(pcp_instance.section)
     pcp_instance.display_pyvista(pcp_instance.section)
     user_input = messagebox.askyesnocancel("Save Section", "Do you want to save the section?")
     if user_input is True:
