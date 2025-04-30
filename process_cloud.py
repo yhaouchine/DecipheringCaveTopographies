@@ -11,14 +11,17 @@ import numpy as np
 import time
 import matplotlib.pyplot as plt
 import pyvista as pv
+import logging
 from open3d.cpu.pybind.geometry import PointCloud, Geometry
 from pathlib import Path
 from tkinter import simpledialog, messagebox, Tk, filedialog
 from typing import Tuple, Union, Optional
 from scipy.interpolate import interp1d
 from scipy.spatial import cKDTree
+from sklearn.decomposition import PCA
 
-class CrossSection:
+
+class Section:
     def __init__(self, pc: Optional[PointCloud] = None, position: Optional[np.ndarray] = None,
                  thickness: Optional[float] = None):
         self.pc = pc
@@ -38,7 +41,7 @@ class CrossSection:
             "grey": [0.5, 0.5, 0.5],
             "black": [0.0, 0.0, 0.0],
         }
-
+    
     def load_cloud(self):
         """
         Load a point cloud from a file using Open3D point cloud reading function.        
@@ -192,7 +195,7 @@ class CrossSection:
 
         print(f"Line of cut interpolated successfuly in {time.perf_counter() - start_time:.4f} seconds")
 
-    def extract_section(self, tolerance: float = 0.01) -> np.ndarray:
+    def extract_nearby_points(self, tolerance: float = 0.01) -> np.ndarray:
         """
         Fast extraction of points near the interpolated cutting line using a KDTree.
         """
@@ -218,18 +221,6 @@ class CrossSection:
 
         return self.section
 
-    def display_section(self, points):
-        fig = plt.figure(figsize=(15, 8))
-        ax = fig.add_subplot(111, projection='3d')
-        ax.scatter(points[:, 0], points[:, 1], points[:, 2], c='black', s=1, alpha=0.6, label='Cross-section Points')
-        ax.set_title("Cross-section Visualization")
-        ax.set_xlabel("X")
-        ax.set_ylabel("Y")
-        ax.set_zlabel("Z")
-        ax.axis("equal")
-        ax.legend()
-        plt.show()
-    
     def display_pyvista(self, points):
         """
         Display the extracted section using PyVista.
@@ -261,7 +252,219 @@ class CrossSection:
         o3d.io.write_point_cloud(ply_path, pc)
         messagebox.showinfo("Info", f"Section saved as: {filename}") if ply_path else print("Section not saved.")
 
-    def extract(self, tolerance: float) -> PointCloud:
+
+class PCASection(Section):
+    def __init__(self, pc = None, position = None, thickness = None):
+        
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.INFO)
+
+        if not self.logger.handlers:
+            ch = logging.StreamHandler()
+            formatter = logging.Formatter("%(message)s")
+            ch.setFormatter(formatter)
+            self.logger.addHandler(ch)
+        
+        super().__init__(pc, position, thickness)
+        self.pca_axes = None
+        self.projected_points = None
+        self.mean = None
+        self.z_axis = np.array([0, 0, 1])
+     
+    def pca_projection(self, diagnosis: bool = False) -> np.ndarray:
+        """
+        Project the 3D points onto a 2D plane using Principal Component Analysis (PCA).
+        
+        Parameters:
+        -----------
+            - diagnosis: bool, optional (default=False)
+                Whether to display the PCA diagnosis plot.
+
+        Returns:
+        --------
+        A NumPy array of shape (n, 2) containing the 2D coordinates of the projected points.
+        """
+
+        if self.section is None or len(self.section) == 0:
+            raise ValueError("No points available in 'section' for PCA projection.")
+        
+        start_time = time.perf_counter()
+        self.mean = np.mean(self.section, axis=0)
+        centered_points = self.section - self.mean
+
+        pca = PCA(n_components=3)
+        pca.fit(centered_points)
+        self.pca_axes = pca.components_
+
+        # Ensure the vertical axis is the one closest to Z
+        vertical_idx = np.argmax(np.abs(np.dot(self.pca_axes, self.z_axis)))
+        self.pca_axes[[1, vertical_idx]] = self.pca_axes[[vertical_idx, 1]]
+
+        self.projected_points = pca.transform(centered_points)[:, :2]
+
+        if diagnosis:
+            self._diagnose_pca(pca)
+            self._visualize_pca(pca)
+
+        print(f"PCA performed successfuly in {time.perf_counter() - start_time:.4f} seconds")
+
+        return self.projected_points
+
+    def _diagnose_pca(self, pca: PCA):
+        """
+        Display a diagnosis of the Principal Component Analysis (PCA) results.
+        
+        Parameters:
+        -----------
+            - pca: PCA
+                The PCA object fitted on the centered point cloud.
+        """
+
+        self.logger.info("==================== PCA Diagnosis ====================")
+
+        # 1. Verify the eigenvalues as it indicates the variance of the data along the principal components
+        eigenvalues = pca.explained_variance_
+        self.logger.info("----- Eigenvalues -----")
+        for i, (eig) in enumerate(eigenvalues, 1):
+            self.logger.info(f"Eigenvalue {i}: {eig:.4f}")
+        self.logger.info("")
+
+        # 2. Verify the principal components
+        self.logger.info("----- Principal components -----")
+        for i, axis in enumerate(self.pca_axes, 1):
+            self.logger.info(f"Axis PC{i}: {axis}")
+        self.logger.info("")
+
+        # 3. Verify orthogonality of the principal components
+        dot_product = np.dot(self.pca_axes[0], self.pca_axes[1])
+        self.logger.info(f"PC1 . PC2 = {dot_product:.4f}")
+
+        self.logger.info("=================== END of Diagnosis ===================")
+
+    def _visualize_pca(self, pca: PCA):
+        """
+        Display a 3D and 2D visualization of the point cloud and its principal components.
+
+        Parameters:
+        -----------
+        pca: PCA
+            The PCA object fitted on the centered point cloud.
+        """
+
+        fig = plt.figure(figsize=(12, 5))
+
+        # 3D view
+        ax3d = fig.add_subplot(121, projection='3d')
+        ax3d.scatter(self.section[:, 0], self.section[:, 1], self.section[:, 2], c='black', s=1, alpha=0.6,
+                     label='3D Points')
+        ax3d.set_title("3D Point Cloud")
+        ax3d.set_xlabel("X")
+        ax3d.set_ylabel("Y")
+        ax3d.set_zlabel("Z")
+
+        # Setting equal aspect ratio for 3D plot
+        max_range = np.array([self.section[:, 0].max() - self.section[:, 0].min(),
+                              self.section[:, 1].max() - self.section[:, 1].min(),
+                              self.section[:, 2].max() - self.section[:, 2].min()]).max() / 2.0
+
+        mid_x = (self.section[:, 0].max() + self.section[:, 0].min()) * 0.5
+        mid_y = (self.section[:, 1].max() + self.section[:, 1].min()) * 0.5
+        mid_z = (self.section[:, 2].max() + self.section[:, 2].min()) * 0.5
+
+        ax3d.set_xlim(mid_x - max_range, mid_x + max_range)
+        ax3d.set_ylim(mid_y - max_range, mid_y + max_range)
+        ax3d.set_zlim(mid_z - max_range, mid_z + max_range)
+
+        # Adding arrows for the principal components
+        scale = 0.1 * np.linalg.norm(self.section.max(axis=0) - self.section.min(axis=0))
+        colors = ['red', 'green', 'blue']
+        labels = ['PC1', 'PC2', 'PC3']
+        for i, (axis, color, label) in enumerate(zip(self.pca_axes, colors, labels), 1):
+            ax3d.quiver(*self.mean, *axis * scale, color=color, label=label)
+
+        ax3d.legend()
+
+        # 2D view
+        ax2d = fig.add_subplot(122)
+        ax2d.scatter(self.projected_points[:, 0], self.projected_points[:, 1], c='black', s=1, alpha=0.6,
+                     label='2D Projection')
+        ax2d.set_title("2D Projection of the Point Cloud")
+        ax2d.set_xlabel("PC1")
+        ax2d.set_ylabel("PC2")
+        ax2d.axis('equal')
+
+        # Create vectors for the principal components
+        pc1_3d = self.pca_axes[0] * 0.2
+        pc2_3d = self.pca_axes[1] * 0.2
+
+        # Transform the vectors to the 2D plane
+        pc1_2d = pca.transform([pc1_3d])
+        pc2_2d = pca.transform([pc2_3d])
+
+        arrow_scale_2d = 20
+        ax2d.arrow(0, 0, pc1_2d[0, 0] * arrow_scale_2d, pc1_2d[0, 1] * arrow_scale_2d, color='red', width=0.01,
+                   head_width=0.4, label='PC1')
+        ax2d.arrow(0, 0, pc2_2d[0, 0] * arrow_scale_2d, pc2_2d[0, 1] * arrow_scale_2d, color='green', width=0.01,
+                   head_width=0.4, label='PC2')
+
+        ax2d.legend()
+
+        plt.tight_layout()
+        plt.show()
+
+    def compute(self, show: bool = True, diagnosis: bool = False):
+        # Compute the PCA projection
+        self.pca_projection(diagnosis=diagnosis)
+
+        if show:
+            fig = plt.figure(figsize=(12, 5))
+            ax = fig.add_subplot(111)
+            ax.scatter(self.projected_points[:, 0], self.projected_points[:, 1], c='black', s=1, alpha=0.6,
+                        label='2D Projection')
+            ax.set_title("2D Projection of the Point Cloud")
+            ax.set_xlabel("PC1")
+            ax.set_ylabel("PC2")
+            ax.axis('equal')
+            ax.legend()
+            plt.show()
+
+
+class DevelopedSection(Section):
+    def __init__(self, pc: Optional[PointCloud] = None):
+        super().__init__(pc=pc)
+        self.developed = None
+        self.interpolated_line = None
+
+    def compute(self, show: bool = True):
+        # compute cumulative distance along the densified line
+        deltas = np.linalg.norm(np.diff(self.interpolated_line, axis=0), axis=1)
+        cumdist = np.hstack([[0], np.cumsum(deltas)])
+        # project each section point
+        developed = []
+        tree_line = cKDTree(self.interpolated_line[:, :2])
+        dists, idxs = tree_line.query(self.section[:, :2])
+        for pt, i in zip(self.section, idxs):
+            developed.append([cumdist[i], pt[2]])  # X: distance, Y: Z
+        self.developed = np.array(developed)
+
+        if show:
+            if self.developed is None:
+                raise ValueError("Developed section not computed yet.")
+            plt.figure(figsize=(12,6))
+            plt.scatter(self.developed[:,0], self.developed[:,1], s=1)
+            plt.xlabel('Distance déroulée (m)')
+            plt.ylabel('Altitude Z (m)')
+            plt.title('Coupe développée (Z vs. distance)')
+            plt.axis('equal')
+            plt.show()
+
+
+
+
+
+
+
+def extract(self, tolerance: float) -> PointCloud:
         """
         Function to extract a cross-section of the point cloud located at the picked point in the visualizer.
         If multiple points are selected in the visualizer, extract as many cross-sections.
@@ -294,42 +497,31 @@ class CrossSection:
 
         return self.cross_section
 
-    def develop_section(self):
-        # compute cumulative distance along the densified line
-        deltas = np.linalg.norm(np.diff(self.interpolated_line, axis=0), axis=1)
-        cumdist = np.hstack([[0], np.cumsum(deltas)])
-        # project each section point
-        developed = []
-        tree_line = cKDTree(self.interpolated_line[:, :2])
-        dists, idxs = tree_line.query(self.section[:, :2])
-        for pt, i in zip(self.section, idxs):
-            developed.append([cumdist[i], pt[2]])  # X: distance, Y: Z
-        self.developed = np.array(developed)
-
-    def show_developed(self):
-        if self.developed is None:
-            raise ValueError("Developed section not computed yet.")
-        plt.figure(figsize=(12,6))
-        plt.scatter(self.developed[:,0], self.developed[:,1], s=1)
-        plt.xlabel('Distance déroulée (m)')
-        plt.ylabel('Altitude Z (m)')
-        plt.title('Coupe développée (Z vs. distance)')
-        plt.axis('equal')
-        plt.show()
-
-
-def extract_cross_section(tolerance: float):
+def extract_cross_section(tolerance: float, method: str = "developed") -> None:
     o3d.visualization.gui.Application.instance.initialize()
-    pcp_instance = CrossSection()
+
+    if method == "developed":
+        pcp_instance = DevelopedSection()
+    elif method == "pca":
+        pcp_instance = PCASection()
+    else:
+        raise ValueError("Invalid method. Choose 'developed' or 'pca'.")
+    
     pcp_instance.load_cloud()
     pcp_instance.visualizer(window_name="Point Cloud", geom1=pcp_instance.pc, save=False)
     pcp_instance.sort_points()
     pcp_instance.interpolate_line(auto_resolution=True, resolution=0.005)
-    pcp_instance.extract_section(tolerance=tolerance)
-    pcp_instance.develop_section()
-    pcp_instance.show_developed()
-    pcp_instance.display_section(pcp_instance.section)
-    pcp_instance.display_pyvista(pcp_instance.section)
+    pcp_instance.extract_nearby_points(tolerance=tolerance)
+
+    if method == "pca":
+        pcp_instance.compute(show=True, diagnosis=True)
+        pcp_instance.section = pcp_instance.projected_points
+    elif method == "developed":
+        pcp_instance.compute(show=True)
+        pcp_instance.section = pcp_instance.developed
+    else:
+        raise ValueError("Invalid method. Choose 'developed' or 'pca'.")
+    
     user_input = messagebox.askyesnocancel("Save Section", "Do you want to save the section?")
     if user_input is True:
         pcp_instance.to_ply(points=pcp_instance.section)
@@ -342,4 +534,8 @@ if __name__ == "__main__":
     root = Tk()
     root.withdraw()
     tolerance = 0.02
-    extract_cross_section(tolerance=tolerance)
+    method =simpledialog.askstring("Method", "Enter the method for cross-section extraction (developed/pca):")
+    if method not in ["developed", "pca"]:
+        messagebox.showerror("Error", "Invalid method. Please enter 'developed' or 'pca'.")
+        sys.exit(1)
+    extract_cross_section(tolerance=tolerance, method=method)
