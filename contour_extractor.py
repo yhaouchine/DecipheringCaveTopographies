@@ -7,6 +7,7 @@ import tkinter as tk
 import time
 import os
 import vtk
+from process_cloud import PCASection, DevelopedSection
 from tkinter import filedialog, Tk, messagebox, ttk
 from typing import Tuple, Optional
 from open3d.cpu.pybind.geometry import PointCloud
@@ -23,13 +24,15 @@ class UserInterface:
         self.controller = controller
 
         # Tk variables
-        self.method_var = tk.StringVar(value="concave")
+        self.hull_method_var = tk.StringVar(value="concave")
+        self.section_type_var = tk.StringVar(value="developed")
         self.poisson_enabled_var = tk.BooleanVar(value=False)
         self.densification_enabled_var = tk.BooleanVar(value=False)
         self.densification_method_var = tk.StringVar(value="linear")
 
         # Build UI
         self._init_window()
+        self._create_section_frame()
         self._create_contour_frame()
         self._create_poisson_frame()
         self._create_densification_frame()
@@ -51,15 +54,25 @@ class UserInterface:
         self.window.grab_set()
         self.window.lift()
 
-    def _create_contour_frame(self):
-        frame = ttk.LabelFrame(self.window, text="Contour Parameters", padding=(15,10))
+    def _create_section_frame(self):
+        frame = ttk.LabelFrame(self.window, text="Section Type", padding=(15,10))
         frame.grid(row=0, column=0, columnspan=2, sticky="ew", pady=5)
         for col in (0,1): frame.columnconfigure(col, weight=1)
 
-        ttk.Label(frame, text="Method:").grid(row=0, column=0, sticky="w", pady=5)
-        self.method_combo = ttk.Combobox(frame, textvariable=self.method_var,
+        ttk.Label(frame, text="Section type:").grid(row=0, column=0, sticky="w", pady=5)
+        self.section_type_combo = ttk.Combobox(frame, textvariable=self.section_type_var,
+                                         values=["developed", "pca"], state="readonly")
+        self.section_type_combo.grid(row=0, column=1, sticky="ew", pady=5)
+
+    def _create_contour_frame(self):
+        frame = ttk.LabelFrame(self.window, text="Contour Parameters", padding=(15,10))
+        frame.grid(row=1, column=0, columnspan=2, sticky="ew", pady=5)
+        for col in (0,1): frame.columnconfigure(col, weight=1)
+
+        ttk.Label(frame, text="Contour extraction method:").grid(row=0, column=0, sticky="w", pady=5)
+        self.hull_method_combo = ttk.Combobox(frame, textvariable=self.hull_method_var,
                                          values=["alphashape", "concave"], state="readonly")
-        self.method_combo.grid(row=0, column=1, sticky="ew", pady=5)
+        self.hull_method_combo.grid(row=0, column=1, sticky="ew", pady=5)
 
         ttk.Label(frame, text="Alpha:").grid(row=1, column=0, sticky="w", pady=5)
         self.alpha_entry = ttk.Entry(frame); self.alpha_entry.insert(0, "0.05")
@@ -79,7 +92,7 @@ class UserInterface:
 
     def _create_poisson_frame(self):
         frame = ttk.LabelFrame(self.window, text="Poisson Parameters", padding=(15,10))
-        frame.grid(row=1, column=0, columnspan=2, sticky="ew", pady=5)
+        frame.grid(row=2, column=0, columnspan=2, sticky="ew", pady=5)
         for col in (0,1): frame.columnconfigure(col, weight=1)
 
         ttk.Checkbutton(frame, text="Poisson reconstruction",
@@ -106,7 +119,7 @@ class UserInterface:
 
     def _create_densification_frame(self):
         frame = ttk.LabelFrame(self.window, text="Densification Parameters", padding=(15,10))
-        frame.grid(row=2, column=0, columnspan=2, sticky="ew", pady=5)
+        frame.grid(row=3, column=0, columnspan=2, sticky="ew", pady=5)
         for col in (0,1): frame.columnconfigure(col, weight=1)
 
         ttk.Checkbutton(frame, text="Contour densification",
@@ -139,24 +152,26 @@ class UserInterface:
 
     def _create_button_frame(self):
         frame = ttk.Frame(self.window)
-        frame.grid(row=3, column=0, columnspan=2, pady=15, sticky="ew")
+        frame.grid(row=4, column=0, columnspan=2, pady=15, sticky="ew")
         for col in (0,1): frame.columnconfigure(col, weight=1)
 
         ttk.Button(frame, text="Update Contour", command=self._on_submit).grid(row=0, column=0, padx=5)
         ttk.Button(frame, text="Save", command=self._on_save).grid(row=0, column=1, padx=5)
 
     def _bind_traces(self):
-        self.method_var.trace_add("write", lambda *args: self._toggle_method_fields())
+        # Bind trace events to toggle fields based on user input
+        
+        self.hull_method_var.trace_add("write", lambda *args: self._toggle_hull_method_fields())
         self.poisson_enabled_var.trace_add("write", lambda *args: self._toggle_poisson_fields())
         self.densification_enabled_var.trace_add("write", lambda *args: self._toggle_densification_fields())
 
     def _set_initial_states(self):
-        self._toggle_method_fields()
+        self._toggle_hull_method_fields()
         self._toggle_poisson_fields()
         self._toggle_densification_fields()
 
-    def _toggle_method_fields(self):
-        if self.method_var.get() == "alphashape":
+    def _toggle_hull_method_fields(self):
+        if self.hull_method_var.get() == "alphashape":
             self.alpha_entry.config(state="normal")
             self.concavity_entry.config(state="disabled")
             self.length_threshold_entry.config(state="disabled")
@@ -189,10 +204,12 @@ class UserInterface:
 
     def _on_submit(self):
         try:
-            method = self.method_var.get()
-            alpha = float(self.alpha_entry.get()) if method == "alphashape" else None
-            concavity = float(self.concavity_entry.get()) if method == "concave" else None
-            length_threshold = float(self.length_threshold_entry.get()) if method == "concave" else None
+            # Get user inputs
+            section_type = self.section_type_var.get()
+            hull_method = self.hull_method_var.get()
+            alpha = float(self.alpha_entry.get()) if hull_method == "alphashape" else None
+            concavity = float(self.concavity_entry.get()) if hull_method == "concave" else None
+            length_threshold = float(self.length_threshold_entry.get()) if hull_method == "concave" else None
 
             voxel_str = self.voxel_size_entry.get()
             if not voxel_str.replace('.', '', 1).isdigit():
@@ -220,7 +237,31 @@ class UserInterface:
                     density_threshold_quantile=density,
                     target_number_of_points=nb_pts
                 )
-            self.controller.pca_projection()
+            
+            # Develop or performe a PCA according to the section type selected
+            if section_type == "developed":
+                self.controller.section_type = "developed"
+                developed_section = DevelopedSection(pc=self.controller.reduced_cloud)
+                developed_section.section = self.controller.points_3d
+
+                if self.controller.pc_name:
+                    npy_file_path = os.path.join(self.controller.parent_folder, f"{self.controller.pc_name}_interpolated_line.npy")
+                    print (f"Loading interpolated line from {npy_file_path}...")
+                    if os.path.exists(npy_file_path):
+                        developed_section.interpolated_line = np.load(npy_file_path)
+                        logger.info(f"Interpolated line loaded from {npy_file_path}.")
+                    else:
+                        logger.warning(f"Interpolated line file not found: {npy_file_path}.")
+                else:
+                    logger.error("Point cloud name (pc_name) is not set. Cannot construct file path for interpolated line.")
+
+                self.controller.projected_points = developed_section.compute(show=False)
+            elif section_type == "pca":
+                self.controller.section_type = "pca"
+                projected_section = PCASection(pc=self.controller.reduced_cloud)
+                projected_section.section = self.controller.points_3d
+                self.controller.projected_points = projected_section.compute(show=False, diagnosis=diagnose)
+
 
             sorted_pts = sort_by_chain(self.controller.projected_points)
             if self.densification_enabled_var.get():
@@ -235,7 +276,7 @@ class UserInterface:
                 self.controller.projected_points = sorted_pts
 
             self.controller.compute_hull(
-                method=method,
+                hull_method=hull_method,
                 alpha=alpha,
                 concavity=concavity,
                 length_threshold=length_threshold
@@ -266,7 +307,6 @@ class ContourExtractor:
         self.pc_name = None
         self.parent_folder = None
         self.points_3d = None
-        self.points_2d = None
         self.contour = None
         self.mean = None
         self.pca_axes = None
@@ -278,6 +318,7 @@ class ContourExtractor:
         self.perimeter: Optional[float] = None
         self.roughness: Optional[float] = None
         self.curvature: Optional[np.ndarray] = None
+        self.section_type = None
 
     def load_cloud(self):
         """
@@ -287,7 +328,9 @@ class ContourExtractor:
         try:
             pc_path = filedialog.askopenfilename(title="Select Point Cloud file",
                                                  filetypes=[("Point Cloud files", "*.ply")])
-            self.pc_name = pc_path.split("/")[-1].split(".")[0]
+            # on stocke aussi le dossier parent pour retrouver le .npy
+            self.parent_folder = os.path.dirname(pc_path)
+            self.pc_name = os.path.splitext(os.path.basename(pc_path))[0]
             logger.info("")
             start_time = time.perf_counter()
             logger.info(f"===== Loading point cloud {self.pc_name}... =====")
@@ -332,143 +375,6 @@ class ContourExtractor:
             logger.error(f"An error occurred while downsampling the point cloud: {e}")
             raise
 
-    def pca_projection(self, diagnosis: bool = False, visualize: bool = False) -> np.ndarray:
-        """
-        Project the 3D points onto a 2D plane using Principal Component Analysis (PCA).
-        
-        Parameters:
-        -----------
-            - diagnosis: bool, optional (default=False)
-                Whether to display the PCA diagnosis plot.
-            - visualize: bool, optional (default=False)
-                Whether to display the 2D projection of the point cloud.
-
-        Returns:
-        --------
-        A NumPy array of shape (n, 2) containing the 2D coordinates of the projected points.
-        """
-
-        self.mean = np.mean(self.points_3d, axis=0)
-        centered_points = self.points_3d - self.mean
-        covariance_matrix = np.cov(centered_points, rowvar=False)
-
-        pca = PCA(n_components=3)
-        pca.fit(centered_points)
-        self.pca_axes = pca.components_
-
-        self.points_2d = pca.transform(centered_points)[:, :2]
-        self.projected_points = self.points_2d
-
-        if diagnosis:
-            self._diagnose_pca(pca)
-
-        if visualize:
-            self._visualize_pca(pca)
-
-        return self.projected_points
-
-    def _diagnose_pca(self, pca: PCA):
-        """
-        Display useful information on the Principal Component Analysis (PCA) results.
-        
-        Parameters:
-        -----------
-            - pca: PCA
-                The PCA object fitted on the centered point cloud.
-        """
-
-        self.logger.info("==================== PCA Diagnosis ====================")
-
-        # 1. Verify the eigenvalues as it indicates the variance of the data along the principal components
-        eigenvalues = pca.explained_variance_
-        self.logger.info("----- Eigenvalues -----")
-        for i, (eig) in enumerate(eigenvalues, 1):
-            self.logger.info(f"Eigenvalue {i}: {eig:.4f}")
-        self.logger.info("")
-
-        # 2. Verify the principal components
-        self.logger.info("----- Principal components -----")
-        for i, axis in enumerate(self.pca_axes, 1):
-            self.logger.info(f"Axis PC{i}: {axis}")
-        self.logger.info("")
-
-        # 3. Verify orthogonality of the principal components
-        dot_product = np.dot(self.pca_axes[0], self.pca_axes[1])
-        self.logger.info(f"PC1 . PC2 = {dot_product:.4f}")
-
-        self.logger.info("=================== END of Diagnosis ===================")
-
-    def _visualize_pca(self, pca: PCA):
-        """
-        Display a 3D and 2D-projected visualization of the point cloud and its principal components.
-
-        Parameters:
-        -----------
-        pca: PCA
-            The PCA object fitted on the centered point cloud.
-        """
-
-        fig = plt.figure(figsize=(12, 5))
-
-        # 3D view
-        ax3d = fig.add_subplot(121, projection='3d')
-        ax3d.scatter(self.points_3d[:, 0], self.points_3d[:, 1], self.points_3d[:, 2], c='black', s=1, alpha=0.6,
-                     label='3D Points')
-        ax3d.set_title("3D Point Cloud")
-        ax3d.set_xlabel("X")
-        ax3d.set_ylabel("Y")
-        ax3d.set_zlabel("Z")
-
-        # Setting equal aspect ratio for 3D plot
-        max_range = np.array([self.points_3d[:, 0].max() - self.points_3d[:, 0].min(),
-                              self.points_3d[:, 1].max() - self.points_3d[:, 1].min(),
-                              self.points_3d[:, 2].max() - self.points_3d[:, 2].min()]).max() / 2.0
-
-        mid_x = (self.points_3d[:, 0].max() + self.points_3d[:, 0].min()) * 0.5
-        mid_y = (self.points_3d[:, 1].max() + self.points_3d[:, 1].min()) * 0.5
-        mid_z = (self.points_3d[:, 2].max() + self.points_3d[:, 2].min()) * 0.5
-
-        ax3d.set_xlim(mid_x - max_range, mid_x + max_range)
-        ax3d.set_ylim(mid_y - max_range, mid_y + max_range)
-        ax3d.set_zlim(mid_z - max_range, mid_z + max_range)
-
-        # Adding arrows for the principal components
-        scale = 0.1 * np.linalg.norm(self.points_3d.max(axis=0) - self.points_3d.min(axis=0))
-        colors = ['red', 'green', 'blue']
-        labels = ['PC1', 'PC2', 'PC3']
-        for i, (axis, color, label) in enumerate(zip(self.pca_axes, colors, labels), 1):
-            ax3d.quiver(*self.mean, *axis * scale, color=color, label=label)
-
-        ax3d.legend()
-
-        # 2D view
-        ax2d = fig.add_subplot(122)
-        ax2d.scatter(self.projected_points[:, 0], self.projected_points[:, 1], c='black', s=1, alpha=0.6,
-                     label='2D Projection')
-        ax2d.set_title("2D Projection of the Point Cloud")
-        ax2d.set_xlabel("PC1")
-        ax2d.set_ylabel("PC2")
-        ax2d.axis('equal')
-
-        # Create vectors for the principal components
-        pc1_3d = self.pca_axes[0] * 0.2
-        pc2_3d = self.pca_axes[1] * 0.2
-
-        # Transform the vectors to the 2D plane
-        pc1_2d = pca.transform([pc1_3d])
-        pc2_2d = pca.transform([pc2_3d])
-
-        arrow_scale_2d = 20
-        ax2d.arrow(0, 0, pc1_2d[0, 0] * arrow_scale_2d, pc1_2d[0, 1] * arrow_scale_2d, color='red', width=0.01,
-                   head_width=0.4, label='PC1')
-        ax2d.arrow(0, 0, pc2_2d[0, 0] * arrow_scale_2d, pc2_2d[0, 1] * arrow_scale_2d, color='green', width=0.01,
-                   head_width=0.4, label='PC2')
-
-        ax2d.legend()
-
-        plt.tight_layout()
-        plt.show()
-
     def alphashape_hull(self, alpha: float) -> Tuple[any, float]:
         """
         Compute the alpha shape of a set of 2D points. The alpha shape is a geometric structure 
@@ -499,7 +405,7 @@ class ContourExtractor:
         import time
         try:
             start_time = time.perf_counter()
-            self.contour = alphashape.alphashape(self.points_2d, alpha)
+            self.contour = alphashape.alphashape(self.projected_points, alpha)
             end_time = time.perf_counter()
             self.durations = end_time - start_time
             if self.contour is None:
@@ -546,7 +452,7 @@ class ContourExtractor:
 
         import time
         start_time = time.perf_counter()
-        hull = concave_hull(self.points_2d, concavity=c, length_threshold=length_threshold)
+        hull = concave_hull(self.projected_points, concavity=c, length_threshold=length_threshold)
         hull = np.array(hull)
 
         if not np.allclose(hull[0], hull[-1]):  # Ensure the hull is closed
@@ -679,7 +585,7 @@ class ContourExtractor:
 
     def display_contour(self):
         """
-        Display the contour in the PCA plane along with the point cloud and the computed area and perimeter.
+        Display the contour along with the point cloud and the computed area and perimeter.
         """
 
         fig = plt.figure(figsize=(8, 8) if self.points_3d is None else (16, 8))
@@ -718,10 +624,10 @@ class ContourExtractor:
         else:
             raise TypeError("Unsupported contour format for display.")
 
-        # Fill the contour in the PCA plan
+        # Fill the contour
         polygon = plt.Polygon(coords, closed=True, facecolor='red', alpha=0.2, edgecolor='r', linewidth=2.0)
         ax2d.add_patch(polygon)
-        ax2d.plot(coords[:, 0], coords[:, 1], 'r--', linewidth=2.0, label="Contour (In the PCA Plane)")
+        ax2d.plot(coords[:, 0], coords[:, 1], 'r--', linewidth=2.0, label="Contour")
         ax2d.scatter(self.projected_points[:, 0], self.projected_points[:, 1], c='black', s=1, label="Projected points")
 
         # Add area and perimeter to the legend
@@ -732,22 +638,28 @@ class ContourExtractor:
         ax2d.plot([], [], ' ', label=perimeter_label)
         ax2d.plot([], [], ' ', label=roughness_label)
 
-        ax2d.set_title("Contour in PCA Plane")
-        ax2d.set_xlabel("PC1")
-        ax2d.set_ylabel("PC2")
+        # Change the labels according to the section type
+        if self.section_type == "pca":
+            ax2d.set_title("Contour in PCA Plane")
+            ax2d.set_xlabel("PC1")
+            ax2d.set_ylabel("PC2")
+        elif self.section_type == "developed":
+            ax2d.set_title("Developed Section Contour")
+            ax2d.set_xlabel("X (m)")
+            ax2d.set_ylabel("Z (m)")
         ax2d.legend(loc='upper right')  # Move the legend to the top right corner
         ax2d.axis("equal")
         plt.tight_layout()
         plt.show()
 
-    def compute_hull(self, method: str, alpha: Optional[float] = None, concavity: Optional[float] = None,
+    def compute_hull(self, hull_method: str, alpha: Optional[float] = None, concavity: Optional[float] = None,
                 length_threshold: Optional[float] = None):
         """
         Compute the contour of the point cloud using either the convex or concave hull method.
 
         Parameters:
         -----------
-            - method : str, optional (default='concave')
+            - hull_method : str, optional (default='concave')
                 The method used to extract the contour. Choose between 'alphashape' or 'concave'.
 
             - alpha : float, optional (default=3.5), MANDATORY for alphashape method
@@ -761,11 +673,11 @@ class ContourExtractor:
                 which helps filter out edges caused by noise.
         """
 
-        if method == 'alphashape':
+        if hull_method == 'alphashape':
             if alpha is None:
                 raise ValueError("Alpha parameter must be provided for convex method.")
             self.alphashape_hull(alpha=alpha)
-        elif method == 'concave':
+        elif hull_method == 'concave':
             if concavity is None or length_threshold is None:
                 raise ValueError("Concavity and length_threshold must be provided for concave method.")
             self.concave_hull(c=concavity, length_threshold=length_threshold)
@@ -903,8 +815,8 @@ class ContourExtractor:
 
             densified.append(p2)
 
-        self.points_2d = np.array(densified)
-        return self.points_2d
+        self.projected_points = np.array(densified)
+        return self.projected_points
 
 def spline_interpolate_segment(contour: np.ndarray, i1: int, i2: int, n_points: int = 10, window: int = 3) -> np.ndarray:
     """
@@ -950,25 +862,56 @@ def sort_by_chain(contour: np.ndarray) -> np.ndarray:
 
     return contour[order]
 
-def extract_contour(method: str, voxel_size: float, alpha: float, concavity: float, length_threshold: float,
-                    diagnose: bool = False, visualize: bool = False):
+def extract_contour(section_type: str, hull_extraction_method: str, voxel_size: float, alpha: float, concavity: float, length_threshold: float,
+                    diagnose: bool = False):
     root = Tk()
     root.withdraw()
     cloud = ContourExtractor()
     cloud.load_cloud()
     cloud.downsample(voxel_size=voxel_size)
-    cloud.pca_projection(diagnosis=diagnose, visualize=visualize)
-    cloud.compute_hull(method=method, alpha=alpha, concavity=concavity, length_threshold=length_threshold)
+
+    if section_type == 'pca':
+        cloud.section_type = 'pca'
+        projected_section = PCASection(pc=cloud.reduced_cloud)
+        projected_section.section = cloud.points_3d
+        cloud.projected_points = projected_section.compute(show=False, diagnosis=diagnose)
+
+    elif section_type == 'developed':
+        cloud.section_type = 'developed'
+        developed_section = DevelopedSection(pc=cloud.reduced_cloud)
+        developed_section.section = cloud.points_3d
+
+        if cloud.pc_name:
+            npy_file_path = os.path.join(cloud.parent_folder, f"{cloud.pc_name}_interpolated_line.npy")
+            print (f"Loading interpolated line from {npy_file_path}...")
+            if os.path.exists(npy_file_path):
+                developed_section.interpolated_line = np.load(npy_file_path)
+                logger.info(f"Interpolated line loaded from {npy_file_path}.")
+            else:
+                logger.warning(f"Interpolated line file not found: {npy_file_path}.")
+        else:
+            logger.error("Point cloud name (pc_name) is not set. Cannot construct file path for interpolated line.")
+        cloud.projected_points = developed_section.compute(show=False)
+
+    cloud.compute_hull(hull_method=hull_extraction_method, alpha=alpha, concavity=concavity, length_threshold=length_threshold)
     cloud.display_contour()
     cloud.update_contour(root=root)
 
 if __name__ == "__main__":
     voxel_size = 0.01
-    method = 'concave'  # 'alphashape' or 'concave'
+    section_type = 'developed'  # 'pca' or 'developed'
+    hull_method = 'concave'  # 'alphashape' or 'concave'
     alpha = 0.05
     concavity = 1.0
     length_threshold = 0.02
     diagnose = False
     visualize = False
 
-    extract_contour(method=method, voxel_size=voxel_size, alpha=alpha, concavity=concavity, length_threshold=length_threshold)
+    extract_contour(
+        section_type=section_type,
+        hull_extraction_method=hull_method,
+        voxel_size=voxel_size,
+        alpha=alpha,
+        concavity=concavity,
+        length_threshold=length_threshold
+    )
