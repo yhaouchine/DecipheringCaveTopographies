@@ -36,6 +36,7 @@ class Section:
         self.interpolated_line = None
         self.section = None
         self.pc_name = None
+        self.filename = None
         self.background_color = {
             "white": [1.0, 1.0, 1.0],
             "grey": [0.5, 0.5, 0.5],
@@ -49,6 +50,7 @@ class Section:
         start_time = time.perf_counter()
         pc_path = filedialog.askopenfilename(title="Select Point Cloud file", filetypes=[("Point Cloud files", "*.ply")])
         self.pc_name = pc_path.split("/")[-1].split(".")[0]
+        self.parent_folder = os.path.dirname(pc_path)
         self.pc = o3d.io.read_point_cloud(pc_path)
         if self.pc.is_empty():
             raise ValueError("The point cloud is empty or not loaded correctly.")
@@ -192,7 +194,6 @@ class Section:
 
         # Perform the interpolation using the calculated or provided number of points
         self.interpolated_line = interp_func(np.linspace(0, 1, nb_points))
-
         print(f"Line of cut interpolated successfuly in {time.perf_counter() - start_time:.4f} seconds")
 
     def extract_nearby_points(self, tolerance: float = 0.01) -> np.ndarray:
@@ -261,9 +262,22 @@ class Section:
 
         # Save the point cloud to a PLY file
         ply_path = filedialog.asksaveasfilename(defaultextension=".ply", confirmoverwrite=True, filetypes=[("PLY files", "*.ply")])
-        filename = ply_path.split("/")[-1]
+        if ply_path:
+            self.filename = ply_path.split("/")[-1]
+        else:
+            raise ValueError("Save operation was canceled. No file path provided.")
+
+        self.filename = ply_path.split("/")[-1]
         o3d.io.write_point_cloud(ply_path, pc)
-        messagebox.showinfo("Info", f"Section saved as: {filename}") if ply_path else print("Section not saved.")
+
+        # Save the interpolated line as an npy array if the instance is DevelopedSection and not PCASection
+        if self.interpolated_line is None:
+            raise ValueError("Interpolated line is not defined. Cannot save as .npy file.")
+        npy_path = ply_path.replace(".ply", "_interpolated_line.npy")
+        np.save(npy_path, self.interpolated_line)
+        print(f"Interpolated line saved as: {npy_path}")
+        
+        messagebox.showinfo("Info", f"Section saved as: {self.filename}") if ply_path else print("Section not saved.")
 
 
 class PCASection(Section):
@@ -440,12 +454,14 @@ class PCASection(Section):
             ax.axis('equal')
             ax.legend()
             plt.show()
+        
+        return self.projected_points
 
 
 class DevelopedSection(Section):
     def __init__(self, pc: Optional[PointCloud] = None):
         super().__init__(pc=pc)
-        self.developed = None
+        self.developed_section = None
         self.interpolated_line = None
 
     def compute(self, show: bool = True):
@@ -458,18 +474,20 @@ class DevelopedSection(Section):
         dists, idxs = tree_line.query(self.section[:, :2])
         for pt, i in zip(self.section, idxs):
             developed.append([cumdist[i], pt[2]])  # X: distance, Y: Z
-        self.developed = np.array(developed)
+        self.developed_section = np.array(developed)
 
         if show:
-            if self.developed is None:
+            if self.developed_section is None:
                 raise ValueError("Developed section not computed yet.")
             plt.figure(figsize=(12,6))
-            plt.scatter(self.developed[:,0], self.developed[:,1], s=1)
+            plt.scatter(self.developed_section[:,0], self.developed_section[:,1], s=1)
             plt.xlabel('Developed distance (m)')
             plt.ylabel('Height Z (m)')
             plt.title('Developed Section')
             plt.axis('equal')
             plt.show()
+        
+        return self.developed_section
 
 
 
