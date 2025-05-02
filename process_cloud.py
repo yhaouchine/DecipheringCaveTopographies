@@ -221,18 +221,31 @@ class Section:
 
         return self.section
 
-    def display_pyvista(self, points):
+    def display(self, points):
         """
         Display the extracted section using PyVista.
         """
         if points is None or len(points) == 0:
             raise ValueError("No points available to display.")
 
-        plotter = pv.Plotter()
+        plotter = pv.Plotter(window_size=[1280, 800])
         cloud = pv.PolyData(points)
-        plotter.add_mesh(cloud, color='black', point_size=5, render_points_as_spheres=True)
+        plotter.add_mesh(cloud, color='blue', point_size=3, render_points_as_spheres=True)
         plotter.add_axes()
-        plotter.show(title="Cross-section Visualization")
+        plotter.set_background(self.background_color["white"])
+        plotter.show_bounds(
+            grid='back',
+            location = 'outer',
+            all_edges=False,
+            n_xlabels=4,
+            n_ylabels=4,
+            n_zlabels=4,
+            bold = True,
+            font_family = 'arial',
+            font_size = 10,
+            )
+        plotter.add_title("Extracted Section", font_size=18, font='arial')
+        plotter.show(title="section Visualization")
 
     def to_ply(self, points):
         """
@@ -452,9 +465,9 @@ class DevelopedSection(Section):
                 raise ValueError("Developed section not computed yet.")
             plt.figure(figsize=(12,6))
             plt.scatter(self.developed[:,0], self.developed[:,1], s=1)
-            plt.xlabel('Distance déroulée (m)')
-            plt.ylabel('Altitude Z (m)')
-            plt.title('Coupe développée (Z vs. distance)')
+            plt.xlabel('Developed distance (m)')
+            plt.ylabel('Height Z (m)')
+            plt.title('Developed Section')
             plt.axis('equal')
             plt.show()
 
@@ -497,31 +510,17 @@ def extract(self, tolerance: float) -> PointCloud:
 
         return self.cross_section
 
-def extract_cross_section(tolerance: float, method: str = "developed") -> None:
+def extract_cross_section(tolerance: float) -> None:
     o3d.visualization.gui.Application.instance.initialize()
 
-    if method == "developed":
-        pcp_instance = DevelopedSection()
-    elif method == "pca":
-        pcp_instance = PCASection()
-    else:
-        raise ValueError("Invalid method. Choose 'developed' or 'pca'.")
-    
+    pcp_instance = Section()
     pcp_instance.load_cloud()
     pcp_instance.visualizer(window_name="Point Cloud", geom1=pcp_instance.pc, save=False)
     pcp_instance.sort_points()
     pcp_instance.interpolate_line(auto_resolution=True, resolution=0.005)
     pcp_instance.extract_nearby_points(tolerance=tolerance)
+    pcp_instance.display(points=pcp_instance.section)
 
-    if method == "pca":
-        pcp_instance.compute(show=True, diagnosis=True)
-        pcp_instance.section = pcp_instance.projected_points
-    elif method == "developed":
-        pcp_instance.compute(show=True)
-        pcp_instance.section = pcp_instance.developed
-    else:
-        raise ValueError("Invalid method. Choose 'developed' or 'pca'.")
-    
     user_input = messagebox.askyesnocancel("Save Section", "Do you want to save the section?")
     if user_input is True:
         pcp_instance.to_ply(points=pcp_instance.section)
@@ -534,8 +533,8 @@ if __name__ == "__main__":
     root = Tk()
     root.withdraw()
     tolerance = 0.02
-    method =simpledialog.askstring("Method", "Enter the method for cross-section extraction (developed/pca):")
-    if method not in ["developed", "pca"]:
-        messagebox.showerror("Error", "Invalid method. Please enter 'developed' or 'pca'.")
-        sys.exit(1)
-    extract_cross_section(tolerance=tolerance, method=method)
+    extract_cross_section(tolerance=tolerance)
+
+# TODO: 
+# Add UI to select the method and tolerance.
+# Fix the Save function.
