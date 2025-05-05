@@ -24,6 +24,7 @@ class UserInterface:
         self.controller = controller
 
         # Tk variables
+        self.file_path_var = tk.StringVar()
         self.hull_method_var = tk.StringVar(value="concave")
         self.section_type_var = tk.StringVar(value="developed")
         self.poisson_enabled_var = tk.BooleanVar(value=False)
@@ -55,21 +56,27 @@ class UserInterface:
         self.window.lift()
 
     def _create_section_frame(self):
-        frame = ttk.LabelFrame(self.window, text="Section Type", padding=(15,10))
+        frame = ttk.LabelFrame(self.window, text="Section Parameters", padding=(15,10))
         frame.grid(row=0, column=0, columnspan=2, sticky="ew", pady=5)
         for col in (0,1): frame.columnconfigure(col, weight=1)
 
-        ttk.Label(frame, text="Section type:").grid(row=0, column=0, sticky="w", pady=5)
+        ttk.Label(frame, text="Point cloud file:").grid(row=0, column=0, sticky="w", pady=5)
+        self.file_path_entry = ttk.Entry(frame, textvariable=self.file_path_var, state="readonly")
+
+        browse_button = ttk.Button(frame, text="Browse", command=self.controller.load_cloud)
+        browse_button.grid(row=0, column=1, sticky="ew", pady=5)
+
+        ttk.Label(frame, text="Section type:").grid(row=1, column=0, sticky="w", pady=5)
         self.section_type_combo = ttk.Combobox(frame, textvariable=self.section_type_var,
                                          values=["developed", "pca"], state="readonly")
-        self.section_type_combo.grid(row=0, column=1, sticky="ew", pady=5)
+        self.section_type_combo.grid(row=1, column=1, sticky="ew", pady=5)
 
     def _create_contour_frame(self):
         frame = ttk.LabelFrame(self.window, text="Contour Parameters", padding=(15,10))
         frame.grid(row=1, column=0, columnspan=2, sticky="ew", pady=5)
         for col in (0,1): frame.columnconfigure(col, weight=1)
 
-        ttk.Label(frame, text="Contour extraction method:").grid(row=0, column=0, sticky="w", pady=5)
+        ttk.Label(frame, text="Contour Method:").grid(row=0, column=0, sticky="w", pady=5)
         self.hull_method_combo = ttk.Combobox(frame, textvariable=self.hull_method_var,
                                          values=["alphashape", "concave"], state="readonly")
         self.hull_method_combo.grid(row=0, column=1, sticky="ew", pady=5)
@@ -128,7 +135,7 @@ class UserInterface:
             row=0, column=0, columnspan=2, sticky="w", pady=(0,10)
         )
 
-        ttk.Label(frame, text="Method:").grid(row=1, column=0, sticky="w", pady=5)
+        ttk.Label(frame, text="Densification Method:").grid(row=1, column=0, sticky="w", pady=5)
         self.densification_method_combo = ttk.Combobox(
             frame, textvariable=self.densification_method_var,
             values=["linear", "cubicspline"], state="disabled"
@@ -155,7 +162,7 @@ class UserInterface:
         frame.grid(row=4, column=0, columnspan=2, pady=15, sticky="ew")
         for col in (0,1): frame.columnconfigure(col, weight=1)
 
-        ttk.Button(frame, text="Update Contour", command=self._on_submit).grid(row=0, column=0, padx=5)
+        ttk.Button(frame, text="Compute", command=self._on_submit).grid(row=0, column=0, padx=5)
         ttk.Button(frame, text="Save", command=self._on_save).grid(row=0, column=1, padx=5)
 
     def _bind_traces(self):
@@ -745,8 +752,8 @@ class ContourExtractor:
         else:
             print("Unsupported format.")
 
-    def update_contour(self, root):
-        UserInterface(master=root, controller=self)
+    # def update_contour(self, root):
+    #     UserInterface(master=root, controller=self)
 
     def fill_holes_poisson(self,depth: int = 8,width: int = 0,scale: float = 1.0,linear_fit: bool = False,density_threshold_quantile: float = 0.02,target_number_of_points: int = 5000):
         """
@@ -867,35 +874,37 @@ def extract_contour(section_type: str, hull_extraction_method: str, voxel_size: 
     root = Tk()
     root.withdraw()
     cloud = ContourExtractor()
-    cloud.load_cloud()
-    cloud.downsample(voxel_size=voxel_size)
+    UserInterface(master=root, controller=cloud)
 
-    if section_type == 'pca':
-        cloud.section_type = 'pca'
-        projected_section = PCASection(pc=cloud.reduced_cloud)
-        projected_section.section = cloud.points_3d
-        cloud.projected_points = projected_section.compute(show=False, diagnosis=diagnose)
+    # cloud.load_cloud()
+    # cloud.downsample(voxel_size=voxel_size)
 
-    elif section_type == 'developed':
-        cloud.section_type = 'developed'
-        developed_section = DevelopedSection(pc=cloud.reduced_cloud)
-        developed_section.section = cloud.points_3d
+    # if section_type == 'pca':
+    #     cloud.section_type = 'pca'
+    #     projected_section = PCASection(pc=cloud.reduced_cloud)
+    #     projected_section.section = cloud.points_3d
+    #     cloud.projected_points = projected_section.compute(show=False, diagnosis=diagnose)
 
-        if cloud.pc_name:
-            npy_file_path = os.path.join(cloud.parent_folder, f"{cloud.pc_name}_interpolated_line.npy")
-            print (f"Loading interpolated line from {npy_file_path}...")
-            if os.path.exists(npy_file_path):
-                developed_section.interpolated_line = np.load(npy_file_path)
-                logger.info(f"Interpolated line loaded from {npy_file_path}.")
-            else:
-                logger.warning(f"Interpolated line file not found: {npy_file_path}.")
-        else:
-            logger.error("Point cloud name (pc_name) is not set. Cannot construct file path for interpolated line.")
-        cloud.projected_points = developed_section.compute(show=False)
+    # elif section_type == 'developed':
+    #     cloud.section_type = 'developed'
+    #     developed_section = DevelopedSection(pc=cloud.reduced_cloud)
+    #     developed_section.section = cloud.points_3d
 
-    cloud.compute_hull(hull_method=hull_extraction_method, alpha=alpha, concavity=concavity, length_threshold=length_threshold)
-    cloud.display_contour()
-    cloud.update_contour(root=root)
+    #     if cloud.pc_name:
+    #         npy_file_path = os.path.join(cloud.parent_folder, f"{cloud.pc_name}_interpolated_line.npy")
+    #         print (f"Loading interpolated line from {npy_file_path}...")
+    #         if os.path.exists(npy_file_path):
+    #             developed_section.interpolated_line = np.load(npy_file_path)
+    #             logger.info(f"Interpolated line loaded from {npy_file_path}.")
+    #         else:
+    #             logger.warning(f"Interpolated line file not found: {npy_file_path}.")
+    #     else:
+    #         logger.error("Point cloud name (pc_name) is not set. Cannot construct file path for interpolated line.")
+    #     cloud.projected_points = developed_section.compute(show=False)
+
+    # cloud.compute_hull(hull_method=hull_extraction_method, alpha=alpha, concavity=concavity, length_threshold=length_threshold)
+    # cloud.display_contour()
+    # cloud.update_contour(root=root)
 
 if __name__ == "__main__":
     voxel_size = 0.01
