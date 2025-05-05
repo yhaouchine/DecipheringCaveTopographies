@@ -12,13 +12,16 @@ from tkinter import filedialog, Tk, messagebox, ttk
 from typing import Tuple, Optional
 from open3d.cpu.pybind.geometry import PointCloud
 from concave_hull import concave_hull
-from sklearn.decomposition import PCA
 from shapely.geometry import Polygon, MultiPolygon
 from scipy.spatial import KDTree
+
 
 logger = logging.getLogger(__name__)
 
 class UserInterface:
+    """
+    A class to create a user interface for updating parameters of the contour extraction process.
+    """
     def __init__(self, master, controller):
         self.master = master
         self.controller = controller
@@ -30,6 +33,7 @@ class UserInterface:
         self.poisson_enabled_var = tk.BooleanVar(value=False)
         self.densification_enabled_var = tk.BooleanVar(value=False)
         self.densification_method_var = tk.StringVar(value="linear")
+        self.diagnose_var = tk.BooleanVar(value=False)
 
         # Build UI
         self._init_window()
@@ -56,11 +60,14 @@ class UserInterface:
         self.window.lift()
 
     def _create_section_frame(self):
+        """
+        Create a frame for the section parameters.
+        """
         frame = ttk.LabelFrame(self.window, text="Section Parameters", padding=(15,10))
         frame.grid(row=0, column=0, columnspan=2, sticky="ew", pady=5)
         for col in (0,1): frame.columnconfigure(col, weight=1)
 
-        ttk.Label(frame, text="Point cloud file:").grid(row=0, column=0, sticky="w", pady=5)
+        ttk.Label(frame, text="Point Cloud File:").grid(row=0, column=0, sticky="w", pady=5)
         self.file_path_entry = ttk.Entry(frame, textvariable=self.file_path_var, state="readonly")
         Tooltip(self.file_path_entry, "Select a point cloud file to load.")
 
@@ -69,7 +76,7 @@ class UserInterface:
 
         ttk.Label(frame, text="Section type:").grid(row=1, column=0, sticky="w", pady=5)
         self.section_type_combo = ttk.Combobox(frame, textvariable=self.section_type_var,
-                                         values=["developed", "pca"], state="readonly")
+                                         values=["developed", "pca"], state="readonly", justify="center")
         self.section_type_combo.grid(row=1, column=1, sticky="ew", pady=5)
         Tooltip(
             self.section_type_combo,
@@ -77,15 +84,26 @@ class UserInterface:
             "- Developed: Develop the section along its previously interpolated line. REQUIREMENT: *_interpolated_line.npy file. \n" \
             "- PCA: Project the points in the principal component plan after performing and principal component analysis (PCA)."
             )
+        
+        self.diagnose_checkbutton = ttk.Checkbutton(frame, text="Diagnose PCA",
+                                              variable=self.diagnose_var)
+        self.diagnose_checkbutton.grid(row=2, column=0, columnspan=2, sticky="w", pady=(0,10))
+        Tooltip(
+            self.diagnose_checkbutton,
+            "Enable PCA diagnosis to visualize the PCA axes and the projected points."
+        )
 
     def _create_contour_frame(self):
+        """
+        Create a frame for the contour parameters.
+        """
         frame = ttk.LabelFrame(self.window, text="Contour Parameters", padding=(15,10))
         frame.grid(row=1, column=0, columnspan=2, sticky="ew", pady=5)
         for col in (0,1): frame.columnconfigure(col, weight=1)
 
         ttk.Label(frame, text="Contour Method:").grid(row=0, column=0, sticky="w", pady=5)
         self.hull_method_combo = ttk.Combobox(frame, textvariable=self.hull_method_var,
-                                         values=["alphashape", "concave"], state="readonly")
+                                         values=["alphashape", "concave"], state="readonly", justify="center")
         self.hull_method_combo.grid(row=0, column=1, sticky="ew", pady=5)
         Tooltip(
             self.hull_method_combo,
@@ -132,11 +150,14 @@ class UserInterface:
         )
 
     def _create_poisson_frame(self):
+        """
+        Create a frame for the Poisson parameters.
+        """
         frame = ttk.LabelFrame(self.window, text="Poisson Parameters", padding=(15,10))
         frame.grid(row=2, column=0, columnspan=2, sticky="ew", pady=5)
         for col in (0,1): frame.columnconfigure(col, weight=1)
 
-        poisson_checkbutton = ttk.Checkbutton(frame, text="Poisson reconstruction [EXPERIMENTAL]",
+        poisson_checkbutton = ttk.Checkbutton(frame, text="Poisson Reconstruction [EXPERIMENTAL]",
                                               variable=self.poisson_enabled_var,
                                               command=self._toggle_poisson_fields)
         poisson_checkbutton.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0,10))
@@ -178,11 +199,14 @@ class UserInterface:
         )
 
     def _create_densification_frame(self):
+        """
+        Create a frame for the densification parameters.
+        """
         frame = ttk.LabelFrame(self.window, text="Densification Parameters", padding=(15,10))
         frame.grid(row=3, column=0, columnspan=2, sticky="ew", pady=5)
         for col in (0,1): frame.columnconfigure(col, weight=1)
 
-        densification_checkbutton = ttk.Checkbutton(frame, text="Contour densification",
+        densification_checkbutton = ttk.Checkbutton(frame, text="Contour Densification",
                                                     variable=self.densification_enabled_var,
                                                     command=self._toggle_densification_fields)
         densification_checkbutton.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0,10))
@@ -194,7 +218,7 @@ class UserInterface:
         ttk.Label(frame, text="Densification Method:").grid(row=1, column=0, sticky="w", pady=5)
         self.densification_method_combo = ttk.Combobox(
             frame, textvariable=self.densification_method_var,
-            values=["linear", "cubicspline"], state="disabled"
+            values=["linear", "cubicspline"], state="disabled", justify="center"
         )
         self.densification_method_combo.grid(row=1, column=1, sticky="ew", pady=5)
         self.densification_method_combo.bind(
@@ -234,6 +258,9 @@ class UserInterface:
         )
 
     def _create_button_frame(self):
+        """
+        Create a frame for the buttons.
+        """
         frame = ttk.Frame(self.window)
         frame.grid(row=4, column=0, columnspan=2, pady=15, sticky="ew")
         for col in (0,1): frame.columnconfigure(col, weight=1)
@@ -242,18 +269,35 @@ class UserInterface:
         ttk.Button(frame, text="Save", command=self._on_save).grid(row=0, column=1, padx=5)
 
     def _bind_traces(self):
-        # Bind trace events to toggle fields based on user input
-        
+        """
+        Bind trace events to toggle fields based on user input.
+        """
+        self.section_type_var.trace_add("write", lambda *args: self._toggle_section_type_fields())
         self.hull_method_var.trace_add("write", lambda *args: self._toggle_hull_method_fields())
         self.poisson_enabled_var.trace_add("write", lambda *args: self._toggle_poisson_fields())
         self.densification_enabled_var.trace_add("write", lambda *args: self._toggle_densification_fields())
+        
 
     def _set_initial_states(self):
+        """
+        Set the initial states of the fields based on the default values.
+        """
+        self._toggle_section_type_fields()
         self._toggle_hull_method_fields()
         self._toggle_poisson_fields()
         self._toggle_densification_fields()
 
+    def _toggle_section_type_fields(self):
+        if self.section_type_var.get() == "developed":
+            self.diagnose_checkbutton.config(state="disabled")
+            self.diagnose_var.set(False)
+        elif self.section_type_var.get() == "pca":
+            self.diagnose_checkbutton.config(state="normal")
+
     def _toggle_hull_method_fields(self):
+        """
+        Toggle the fields for the hull method based on the selected method.
+        """
         if self.hull_method_var.get() == "alphashape":
             self.alpha_entry.config(state="normal")
             self.concavity_entry.config(state="disabled")
@@ -264,6 +308,9 @@ class UserInterface:
             self.length_threshold_entry.config(state="normal")
 
     def _toggle_poisson_fields(self):
+        """
+        Toggle the fields for the Poisson parameters based on whether Poisson reconstruction is enabled.
+        """
         state = "normal" if self.poisson_enabled_var.get() else "disabled"
         self.depth_entry.config(state=state)
         self.scale_entry.config(state=state)
@@ -271,6 +318,9 @@ class UserInterface:
         self.nb_points_entry.config(state=state)
 
     def _toggle_densification_fields(self):
+        """
+        Toggle the fields for the densification parameters based on whether densification is enabled.
+        """
         if self.densification_enabled_var.get():
             self.densification_method_combo.config(state="readonly")
             self.segment_length_entry.config(state="normal")
@@ -286,9 +336,13 @@ class UserInterface:
             self.window_entry.config(state="disabled")
 
     def _on_submit(self):
+        """
+        Handle the submission of the form and execute the contour extraction process.
+        """
         try:
             # Get user inputs
             section_type = self.section_type_var.get()
+            diagnose = self.diagnose_var.get()
             hull_method = self.hull_method_var.get()
             alpha = float(self.alpha_entry.get()) if hull_method == "alphashape" else None
             concavity = float(self.concavity_entry.get()) if hull_method == "concave" else None
@@ -311,8 +365,10 @@ class UserInterface:
             max_len = float(self.segment_length_entry.get())
             window = int(self.window_entry.get())
 
-            # Execute pipeline
             plt.close('all')
+            if self.controller.original_cloud is None:
+                messagebox.showwarning("Warning", "No point cloud loaded. Please load a point cloud first using the 'Browse' button.")
+                return
             self.controller.downsample(voxel_size=voxel_size)
             if self.poisson_enabled_var.get():
                 self.controller.fill_holes_poisson(
@@ -370,6 +426,9 @@ class UserInterface:
             messagebox.showerror("Error during contour update", str(e))
 
     def _on_save(self):
+        """
+        Handle the save button click event.
+        """
         if self.controller.contour is None:
             messagebox.showwarning("Warning", "No valid contour computed yet.")
         else:
@@ -997,13 +1056,4 @@ def extract_contour():
 
 
 if __name__ == "__main__":
-    voxel_size = 0.01
-    section_type = 'developed'  # 'pca' or 'developed'
-    hull_method = 'concave'  # 'alphashape' or 'concave'
-    alpha = 0.05
-    concavity = 1.0
-    length_threshold = 0.02
-    diagnose = False
-    visualize = False
-
     extract_contour()
