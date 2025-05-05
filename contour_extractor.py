@@ -62,6 +62,7 @@ class UserInterface:
 
         ttk.Label(frame, text="Point cloud file:").grid(row=0, column=0, sticky="w", pady=5)
         self.file_path_entry = ttk.Entry(frame, textvariable=self.file_path_var, state="readonly")
+        Tooltip(self.file_path_entry, "Select a point cloud file to load.")
 
         browse_button = ttk.Button(frame, text="Browse", command=self.controller.load_cloud)
         browse_button.grid(row=0, column=1, sticky="ew", pady=5)
@@ -70,6 +71,12 @@ class UserInterface:
         self.section_type_combo = ttk.Combobox(frame, textvariable=self.section_type_var,
                                          values=["developed", "pca"], state="readonly")
         self.section_type_combo.grid(row=1, column=1, sticky="ew", pady=5)
+        Tooltip(
+            self.section_type_combo,
+            "Select the type of section to compute. \n" \
+            "- Developed: Develop the section along its previously interpolated line. REQUIREMENT: *_interpolated_line.npy file. \n" \
+            "- PCA: Project the points in the principal component plan after performing and principal component analysis (PCA)."
+            )
 
     def _create_contour_frame(self):
         frame = ttk.LabelFrame(self.window, text="Contour Parameters", padding=(15,10))
@@ -80,59 +87,108 @@ class UserInterface:
         self.hull_method_combo = ttk.Combobox(frame, textvariable=self.hull_method_var,
                                          values=["alphashape", "concave"], state="readonly")
         self.hull_method_combo.grid(row=0, column=1, sticky="ew", pady=5)
+        Tooltip(
+            self.hull_method_combo,
+            "Select the method to compute the contour. \n" \
+            "- Alphashape: Compute the contour using the alpha shape method. \n" \
+            "- Concave: Compute the contour using the concave hull method."
+        )
 
         ttk.Label(frame, text="Alpha:").grid(row=1, column=0, sticky="w", pady=5)
         self.alpha_entry = ttk.Entry(frame); self.alpha_entry.insert(0, "0.05")
         self.alpha_entry.grid(row=1, column=1, sticky="ew", pady=5)
+        Tooltip(
+            self.alpha_entry,
+            "Controls the level of concavity of the contour. \n" \
+            "Alpha ranges from 0 (convex shape) to +infinity (concave shape), Although high values (>10) might cause irrelevent/unwanted behaviour. " \
+        )
+
 
         ttk.Label(frame, text="Concavity:").grid(row=2, column=0, sticky="w", pady=5)
         self.concavity_entry = ttk.Entry(frame); self.concavity_entry.insert(0, "1.0")
         self.concavity_entry.grid(row=2, column=1, sticky="ew", pady=5)
+        Tooltip(
+            self.concavity_entry,
+            "Controls the level of concavity of the contour. \n" \
+            "Value = 1 yield a detailed, concave shape. Value > 1 yield a smoother, more convex shape. Value < 1 are possible to obtain a very concave shapes" \
+            " although it can lead to an overly detailed or disconnected shape."
+        )
 
         ttk.Label(frame, text="Length Threshold:").grid(row=3, column=0, sticky="w", pady=5)
         self.length_threshold_entry = ttk.Entry(frame); self.length_threshold_entry.insert(0, "0.02")
         self.length_threshold_entry.grid(row=3, column=1, sticky="ew", pady=5)
+        Tooltip(
+            self.length_threshold_entry,
+            "The minimum edge length below which segments are ignored during the hull construction, which helps filter out edges caused by noise." \
+            "The unit depends on the unit of the point cloud coordinates (usually meters)."
+        )
 
         ttk.Label(frame, text="Voxel Size:").grid(row=4, column=0, sticky="w", pady=5)
         self.voxel_size_entry = ttk.Entry(frame); self.voxel_size_entry.insert(0, "0.1")
         self.voxel_size_entry.grid(row=4, column=1, sticky="ew", pady=5)
+        Tooltip(
+            self.voxel_size_entry,
+            "The size of a voxel of the grid used for downsampling the contour point cloud. The unit correspond to the unit of the point cloud coordinates (usually meters)."
+        )
 
     def _create_poisson_frame(self):
         frame = ttk.LabelFrame(self.window, text="Poisson Parameters", padding=(15,10))
         frame.grid(row=2, column=0, columnspan=2, sticky="ew", pady=5)
         for col in (0,1): frame.columnconfigure(col, weight=1)
 
-        ttk.Checkbutton(frame, text="Poisson reconstruction",
-                        variable=self.poisson_enabled_var,
-                        command=self._toggle_poisson_fields).grid(
-            row=0, column=0, columnspan=2, sticky="w", pady=(0,10)
+        poisson_checkbutton = ttk.Checkbutton(frame, text="Poisson reconstruction [EXPERIMENTAL]",
+                                              variable=self.poisson_enabled_var,
+                                              command=self._toggle_poisson_fields)
+        poisson_checkbutton.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0,10))
+        Tooltip(
+            poisson_checkbutton,
+            "Enable Poisson reconstruction to fill holes (i.e. areas where points are missing) in the contour." 
         )
 
         ttk.Label(frame, text="Depth:").grid(row=1, column=0, sticky="w", pady=5)
         self.depth_entry = ttk.Entry(frame); self.depth_entry.insert(0, "8")
         self.depth_entry.grid(row=1, column=1, sticky="ew", pady=5)
+        Tooltip(
+            self.depth_entry,
+            "The octree depth used for Poisson reconstruction."
+        )
 
         ttk.Label(frame, text="Scale:").grid(row=2, column=0, sticky="w", pady=5)
         self.scale_entry = ttk.Entry(frame); self.scale_entry.insert(0, "2.0")
         self.scale_entry.grid(row=2, column=1, sticky="ew", pady=5)
+        Tooltip(
+            self.scale_entry,
+            "The scale factor used for poisson reconstruction."
+        )
 
         ttk.Label(frame, text="Density threshold:").grid(row=3, column=0, sticky="w", pady=5)
         self.density_threshold_entry = ttk.Entry(frame); self.density_threshold_entry.insert(0, "0.02")
         self.density_threshold_entry.grid(row=3, column=1, sticky="ew", pady=5)
+        Tooltip(
+            self.density_threshold_entry,
+            "The density threshold used for poisson reconstruction."
+        )
 
         ttk.Label(frame, text="Number of points:").grid(row=4, column=0, sticky="w", pady=5)
         self.nb_points_entry = ttk.Entry(frame); self.nb_points_entry.insert(0, "5000")
         self.nb_points_entry.grid(row=4, column=1, sticky="ew", pady=5)
+        Tooltip(
+            self.nb_points_entry,
+            "The target number of points used for poisson reconstruction."
+        )
 
     def _create_densification_frame(self):
         frame = ttk.LabelFrame(self.window, text="Densification Parameters", padding=(15,10))
         frame.grid(row=3, column=0, columnspan=2, sticky="ew", pady=5)
         for col in (0,1): frame.columnconfigure(col, weight=1)
 
-        ttk.Checkbutton(frame, text="Contour densification",
-                        variable=self.densification_enabled_var,
-                        command=self._toggle_densification_fields).grid(
-            row=0, column=0, columnspan=2, sticky="w", pady=(0,10)
+        densification_checkbutton = ttk.Checkbutton(frame, text="Contour densification",
+                                                    variable=self.densification_enabled_var,
+                                                    command=self._toggle_densification_fields)
+        densification_checkbutton.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0,10))
+        Tooltip(
+            densification_checkbutton,
+            "Enable contour densification to interpolate points in areas where points are missing."
         )
 
         ttk.Label(frame, text="Densification Method:").grid(row=1, column=0, sticky="w", pady=5)
@@ -144,18 +200,38 @@ class UserInterface:
         self.densification_method_combo.bind(
             "<<ComboboxSelected>>", lambda e: self._toggle_densification_fields()
         )
+        Tooltip(
+            self.densification_method_combo,
+            "Select the method to densify the contour. \n" \
+            "- Linear: Interpolate points using a linear method. \n" \
+            "- Cubic Spline: Interpolate points using a cubic spline method."
+        )
 
         ttk.Label(frame, text="Max segment length:").grid(row=2, column=0, sticky="w", pady=5)
         self.segment_length_entry = ttk.Entry(frame); self.segment_length_entry.insert(0, "0.01")
         self.segment_length_entry.grid(row=2, column=1, sticky="ew", pady=5)
+        Tooltip(
+            self.segment_length_entry,
+            "The maximum length of the segments constructed by the densification process. " \
+            " The unit correspond to the unit of the point cloud coordinates (usually meters)."
+        )
 
         ttk.Label(frame, text="Max hole gap:").grid(row=3, column=0, sticky="w", pady=5)
         self.hole_gap_entry = ttk.Entry(frame); self.hole_gap_entry.insert(0, "1.0")
         self.hole_gap_entry.grid(row=3, column=1, sticky="ew", pady=5)
+        Tooltip(
+            self.hole_gap_entry,
+            "The maximum gap between points in the contour that will be filled during the densification process."
+        )
 
         ttk.Label(frame, text="Window:").grid(row=4, column=0, sticky="w", pady=5)
         self.window_entry = ttk.Entry(frame); self.window_entry.insert(0, "3")
         self.window_entry.grid(row=4, column=1, sticky="ew", pady=5)
+        Tooltip(
+            self.window_entry,
+            "The size of the window within which the points will be taken into account for the densification process. " \
+            "TO BE USED WITH CUBIC SPLINE METHOD ONLY."
+        )
 
     def _create_button_frame(self):
         frame = ttk.Frame(self.window)
@@ -298,6 +374,53 @@ class UserInterface:
             messagebox.showwarning("Warning", "No valid contour computed yet.")
         else:
             self.controller.save_contour()
+
+class Tooltip:
+    def __init__(self, widget, text, delay=500):
+        self.widget = widget
+        self.text = text
+        self.delay = delay
+        self.tooltip_window = None
+        self.id_after = None
+
+        widget.bind("<Enter>", self.schedule_tooltip)
+        widget.bind("<Leave>", self.hide_tooltip)
+    
+    def schedule_tooltip(self, event = None):
+        self.unschedule_tooltip()
+        self.id_after = self.widget.after(self.delay, self.show_tooltip)
+
+    def unschedule_tooltip(self):
+        id_after = self.id_after
+        self.id_after = None
+        if id_after:
+            self.widget.after_cancel(id_after)
+
+    def show_tooltip(self, event = None):
+        if self.tooltip_window or not self.text:
+            return
+        x = self.widget.winfo_rootx() + 20
+        y = self.widget.winfo_rooty() + 20
+        self.tooltip_window = tw = tk.Toplevel(self.widget)
+        tw.wm_overrideredirect(True)
+        tw.wm_geometry(f"+{x}+{y}")
+        tw.wm_attributes("-topmost", True)
+        tw.attributes("-alpha", 0.90)
+        label = tk.Label(tw, text=self.text, justify='left',
+                 background="#fdf6e3",  # beige doux
+                 foreground="#333333",  # texte gris foncé
+                 relief='solid', borderwidth=1,
+                 font=("Segoe UI", 10, "normal"),
+                 wraplength=500,  # pour gérer les longs textes
+                 padx=5, pady=3)
+        label.pack(ipadx=5, ipady=2)
+
+    def hide_tooltip(self, event=None):
+        self.unschedule_tooltip()
+        tw = self.tooltip_window
+        self.tooltip_window = None
+        if tw:
+            tw.destroy()
 
 class ContourExtractor:
     def __init__(self):
@@ -752,9 +875,6 @@ class ContourExtractor:
         else:
             print("Unsupported format.")
 
-    # def update_contour(self, root):
-    #     UserInterface(master=root, controller=self)
-
     def fill_holes_poisson(self,depth: int = 8,width: int = 0,scale: float = 1.0,linear_fit: bool = False,density_threshold_quantile: float = 0.02,target_number_of_points: int = 5000):
         """
         
@@ -869,42 +989,12 @@ def sort_by_chain(contour: np.ndarray) -> np.ndarray:
 
     return contour[order]
 
-def extract_contour(section_type: str, hull_extraction_method: str, voxel_size: float, alpha: float, concavity: float, length_threshold: float,
-                    diagnose: bool = False):
+def extract_contour():
     root = Tk()
     root.withdraw()
     cloud = ContourExtractor()
     UserInterface(master=root, controller=cloud)
 
-    # cloud.load_cloud()
-    # cloud.downsample(voxel_size=voxel_size)
-
-    # if section_type == 'pca':
-    #     cloud.section_type = 'pca'
-    #     projected_section = PCASection(pc=cloud.reduced_cloud)
-    #     projected_section.section = cloud.points_3d
-    #     cloud.projected_points = projected_section.compute(show=False, diagnosis=diagnose)
-
-    # elif section_type == 'developed':
-    #     cloud.section_type = 'developed'
-    #     developed_section = DevelopedSection(pc=cloud.reduced_cloud)
-    #     developed_section.section = cloud.points_3d
-
-    #     if cloud.pc_name:
-    #         npy_file_path = os.path.join(cloud.parent_folder, f"{cloud.pc_name}_interpolated_line.npy")
-    #         print (f"Loading interpolated line from {npy_file_path}...")
-    #         if os.path.exists(npy_file_path):
-    #             developed_section.interpolated_line = np.load(npy_file_path)
-    #             logger.info(f"Interpolated line loaded from {npy_file_path}.")
-    #         else:
-    #             logger.warning(f"Interpolated line file not found: {npy_file_path}.")
-    #     else:
-    #         logger.error("Point cloud name (pc_name) is not set. Cannot construct file path for interpolated line.")
-    #     cloud.projected_points = developed_section.compute(show=False)
-
-    # cloud.compute_hull(hull_method=hull_extraction_method, alpha=alpha, concavity=concavity, length_threshold=length_threshold)
-    # cloud.display_contour()
-    # cloud.update_contour(root=root)
 
 if __name__ == "__main__":
     voxel_size = 0.01
@@ -916,11 +1006,4 @@ if __name__ == "__main__":
     diagnose = False
     visualize = False
 
-    extract_contour(
-        section_type=section_type,
-        hull_extraction_method=hull_method,
-        voxel_size=voxel_size,
-        alpha=alpha,
-        concavity=concavity,
-        length_threshold=length_threshold
-    )
+    extract_contour()
