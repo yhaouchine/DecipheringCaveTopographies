@@ -3,7 +3,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-
+results/
 point_clouds/
 saved_clouds/
 images/
@@ -187,3 +187,4 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
