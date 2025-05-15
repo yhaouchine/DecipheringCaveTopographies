@@ -7,16 +7,102 @@ import tkinter as tk
 import time
 import os
 import vtk
+import json
 from process_cloud import PCASection, DevelopedSection
 from tkinter import filedialog, Tk, messagebox, ttk
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Literal
 from open3d.cpu.pybind.geometry import PointCloud
-from concave_hull import concave_hull
+from concave_hull import concave_hull, concave_hull_indexes
 from shapely.geometry import Polygon, MultiPolygon
-from scipy.spatial import KDTree
 
 
 logger = logging.getLogger(__name__)
+
+import json
+from tkinter import filedialog, messagebox
+
+def save_config_json(params_dict, results_dict, default_filename="config_contour.json"):
+    """
+    Ouvre une boîte de dialogue pour choisir où sauvegarder,
+    puis écrit params_dict + results_dict dans un fichier JSON.
+    """
+    cfg = {
+        "parameters": params_dict,
+        "results": results_dict
+    }
+    filepath = filedialog.asksaveasfilename(
+        title="Enregistrer la configuration",
+        defaultextension=".json",
+        filetypes=[("JSON", "*.json")],
+        initialfile=default_filename
+    )
+    if not filepath:
+        return  # Annulé
+    try:
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(cfg, f, ensure_ascii=False, indent=4)
+        messagebox.showinfo("Succès", f"Configuration sauvegardée dans :\n{filepath}")
+    except Exception as e:
+        messagebox.showerror("Erreur sauvegarde", str(e))
+
+
+def load_config_json(gui_instance):
+    """
+    Ouvre un fichier JSON de configuration, restaure les paramètres et résultats dans la GUI,
+    à l'exception du nom de fichier (file_name), qui est seulement conservé pour la traçabilité.
+    """
+    filepath = filedialog.askopenfilename(
+        title="Charger une configuration",
+        filetypes=[("JSON", "*.json")]
+    )
+    if not filepath:
+        return
+
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            cfg = json.load(f)
+
+        params = cfg.get("parameters", {})
+
+        # Boucle sur les paramètres pour les injecter dans les champs, sauf file_name
+        for key, value in params.items():
+            if key == "file_name":
+                continue  # On ne recharge pas le nom de fichier dans l'interface
+
+            var_attr = f"{key}_var"
+            entry_attr = f"{key}_entry"
+
+            var = getattr(gui_instance, var_attr, None)
+            entry = getattr(gui_instance, entry_attr, None)
+
+            # Variables à cocher (BooleanVar)
+            if isinstance(var, tk.BooleanVar):
+                var.set(bool(value))
+
+            # Variables à choix (StringVar ou Entry)
+            elif isinstance(var, tk.StringVar):
+                var.set(str(value))
+
+            elif entry is not None:
+                entry.delete(0, tk.END)
+                if value is not None:
+                    entry.insert(0, str(value))
+            
+            if hasattr(gui_instance, '_toggle_densification_fields'):
+                gui_instance._toggle_densification_fields()
+            if hasattr(gui_instance, '_toggle_poisson_fields'):
+                gui_instance._toggle_poisson_fields()
+            if hasattr(gui_instance, '_toggle_hull_method_fields'):
+                gui_instance._toggle_hull_method_fields()
+            if hasattr(gui_instance, '_toggle_section_type_fields'):
+                gui_instance._toggle_section_type_fields()
+
+        messagebox.showinfo("Succès", f"Configuration chargée depuis :\n{filepath}")
+
+    except Exception as e:
+        messagebox.showerror("Erreur chargement", str(e))
+
+
 
 class UserInterface:
     """
@@ -98,7 +184,7 @@ class UserInterface:
         Create a frame for the contour parameters.
         """
         frame = ttk.LabelFrame(self.window, text="Contour Parameters", padding=(15,10))
-        frame.grid(row=1, column=0, columnspan=2, sticky="ew", pady=5)
+        frame.grid(row=3, column=0, columnspan=2, sticky="ew", pady=5)
         for col in (0,1): frame.columnconfigure(col, weight=1)
 
         ttk.Label(frame, text="Contour Method:").grid(row=0, column=0, sticky="w", pady=5)
@@ -203,7 +289,7 @@ class UserInterface:
         Create a frame for the densification parameters.
         """
         frame = ttk.LabelFrame(self.window, text="Densification Parameters", padding=(15,10))
-        frame.grid(row=3, column=0, columnspan=2, sticky="ew", pady=5)
+        frame.grid(row=1, column=0, columnspan=2, sticky="ew", pady=5)
         for col in (0,1): frame.columnconfigure(col, weight=1)
 
         densification_checkbutton = ttk.Checkbutton(frame, text="Contour Densification",
@@ -257,6 +343,16 @@ class UserInterface:
             "TO BE USED WITH CUBIC SPLINE METHOD ONLY."
         )
 
+        ttk.Label(frame, text="Number of Points:").grid(row=5, column=0, sticky="w", pady=5)
+        self.nbpoints_entry = ttk.Entry(frame); self.nbpoints_entry.insert(0, "3")
+        self.nbpoints_entry.grid(row=5, column=1, sticky="ew", pady=5)
+        Tooltip(
+            self.nbpoints_entry,
+            "The size of the window within which the points will be taken into account for the densification process. " \
+            "TO BE USED WITH CUBIC SPLINE METHOD ONLY."
+            #TODO: change the tooltip text.
+        )
+
     def _create_button_frame(self):
         """
         Create a frame for the buttons.
@@ -267,6 +363,8 @@ class UserInterface:
 
         ttk.Button(frame, text="Compute", command=self._on_submit).grid(row=0, column=0, padx=5)
         ttk.Button(frame, text="Save", command=self._on_save).grid(row=0, column=1, padx=5)
+        ttk.Button(frame, text="Load Config", command=lambda: load_config_json(self)).grid(row=0, column=2, padx=5)
+        ttk.Button(frame, text="Save Config", command=self._on_save_config).grid(row=0, column=3, padx=5)
 
     def _bind_traces(self):
         """
@@ -277,7 +375,6 @@ class UserInterface:
         self.poisson_enabled_var.trace_add("write", lambda *args: self._toggle_poisson_fields())
         self.densification_enabled_var.trace_add("write", lambda *args: self._toggle_densification_fields())
         
-
     def _set_initial_states(self):
         """
         Set the initial states of the fields based on the default values.
@@ -327,20 +424,23 @@ class UserInterface:
             self.hole_gap_entry.config(state="normal")
             if self.densification_method_var.get() == "cubicspline":
                 self.window_entry.config(state="normal")
+                self.nbpoints_entry.config(state="normal")
             else:
                 self.window_entry.config(state="disabled")
+                self.nbpoints_entry.config(state="disabled")
         else:
             self.densification_method_combo.config(state="disabled")
             self.segment_length_entry.config(state="disabled")
             self.hole_gap_entry.config(state="disabled")
             self.window_entry.config(state="disabled")
+            self.nbpoints_entry.config(state="disabled")
 
     def _on_submit(self):
         """
         Handle the submission of the form and execute the contour extraction process.
         """
         try:
-            # Get user inputs
+            # Get user inputs =====================================================================================
             section_type = self.section_type_var.get()
             diagnose = self.diagnose_var.get()
             hull_method = self.hull_method_var.get()
@@ -362,14 +462,21 @@ class UserInterface:
 
             dens_method = self.densification_method_var.get()
             max_gap = float(self.hole_gap_entry.get())
-            max_len = float(self.segment_length_entry.get())
+            min_len = float(self.segment_length_entry.get())
             window = int(self.window_entry.get())
+            cubic_spline_nb_points = int(self.nbpoints_entry.get())
 
             plt.close('all')
             if self.controller.original_cloud is None:
                 messagebox.showwarning("Warning", "No point cloud loaded. Please load a point cloud first using the 'Browse' button.")
                 return
+
+
+            # Downsample the point cloud using voxel grid downsampling ============================================
             self.controller.downsample(voxel_size=voxel_size)
+
+            
+            # Fill holes using Poisson reconstruction if enabled ==================================================
             if self.poisson_enabled_var.get():
                 self.controller.fill_holes_poisson(
                     depth=depth, scale=scale,
@@ -377,7 +484,7 @@ class UserInterface:
                     target_number_of_points=nb_pts
                 )
             
-            # Develop or performe a PCA according to the section type selected
+            # Develop or performe a PCA according to the section type selected =====================================
             if section_type == "developed":
                 self.controller.section_type = "developed"
                 developed_section = DevelopedSection(pc=self.controller.reduced_cloud)
@@ -401,25 +508,39 @@ class UserInterface:
                 projected_section.section = self.controller.points_3d
                 self.controller.projected_points = projected_section.compute(show=False, diagnosis=diagnose)
 
-
-            sorted_pts = sort_by_chain(self.controller.projected_points)
-            if self.densification_enabled_var.get():
-                self.controller.projected_points = self.controller.densify_contour(
-                    contour=sorted_pts,
-                    densification_method=dens_method,
-                    max_segment_length=max_len,
-                    max_allowed_gap=max_gap,
-                    window=window
-                )
-            else:
-                self.controller.projected_points = sorted_pts
-
+            
+            # Compute the contour using the selected method ==========================================================
             self.controller.compute_hull(
                 hull_method=hull_method,
                 alpha=alpha,
                 concavity=concavity,
                 length_threshold=length_threshold
             )
+
+            plt.close('all')
+            # Densify the contour if enabled =========================================================================
+            if self.densification_enabled_var.get():
+                new_contour, new_indexes = self.controller.densify_contour(
+                    contour=self.controller.contour,
+                    indexes=self.controller.contour_indexes,
+                    densification_method=dens_method,
+                    min_segment_length=min_len,
+                    max_allowed_gap=max_gap,
+                    window=window,
+                    
+                )
+
+                self.controller.projected_points = new_contour
+                self.controller.compute_hull(
+                    hull_method=hull_method,
+                    alpha=alpha,
+                    concavity=concavity,
+                    length_threshold=length_threshold
+                )
+
+
+
+            # Display the contour =====================================================================================
             self.controller.display_contour()
 
         except Exception as e:
@@ -433,6 +554,53 @@ class UserInterface:
             messagebox.showwarning("Warning", "No valid contour computed yet.")
         else:
             self.controller.save_contour()
+        # Saving the configuration (parameters and values of area, perimeter, roughness, etc.) into a file.
+
+    def _on_save_config(self):
+        """
+        Handle the save configuration button click event.
+        Save all input parameters, checkbox states, and result metrics to a JSON file.
+        """
+        try:
+            def get_entry_value(entry, cast_type=float, default=None):
+                try:
+                    return cast_type(entry.get())
+                except:
+                    return default
+
+            params_dict = {
+                "file_name": os.path.basename(self.file_path_var.get()),
+                "section_type": self.section_type_var.get(),
+                "diagnose": self.diagnose_var.get(),
+                "hull_method": self.hull_method_var.get(),
+                "alpha": get_entry_value(self.alpha_entry, float) if self.hull_method_var.get() == "alphashape" else None,
+                "concavity": get_entry_value(self.concavity_entry, float) if self.hull_method_var.get() == "concave" else None,
+                "length_threshold": get_entry_value(self.length_threshold_entry, float) if self.hull_method_var.get() == "concave" else None,
+                "voxel_size": get_entry_value(self.voxel_size_entry, float),
+                "poisson_enabled": self.poisson_enabled_var.get(),
+                "depth": get_entry_value(self.depth_entry, int),
+                "scale": get_entry_value(self.scale_entry, float),
+                "density_threshold": get_entry_value(self.density_threshold_entry, float),
+                "nb_points": get_entry_value(self.nb_points_entry, int),
+                "densification_enabled": self.densification_enabled_var.get(),
+                "densification_method": self.densification_method_var.get(),
+                "hole_gap": get_entry_value(self.hole_gap_entry, float),
+                "segment_length": get_entry_value(self.segment_length_entry, float),
+                "window": get_entry_value(self.window_entry, int),
+                "nbpoints": get_entry_value(self.nbpoints_entry, int)
+            }
+
+            results_dict = {
+                "area": self.controller.area,
+                "perimeter": self.controller.perimeter,
+                "roughness": self.controller.roughness
+            }
+
+            save_config_json(params_dict, results_dict)
+
+        except Exception as e:
+            messagebox.showerror("Erreur sauvegarde configuration", str(e))
+
 
 class Tooltip:
     def __init__(self, widget, text, delay=500):
@@ -466,11 +634,11 @@ class Tooltip:
         tw.wm_attributes("-topmost", True)
         tw.attributes("-alpha", 0.90)
         label = tk.Label(tw, text=self.text, justify='left',
-                 background="#fdf6e3",  # beige doux
-                 foreground="#333333",  # texte gris foncé
+                 background="#fdf6e3",
+                 foreground="#333333",
                  relief='solid', borderwidth=1,
                  font=("Segoe UI", 10, "normal"),
-                 wraplength=500,  # pour gérer les longs textes
+                 wraplength=500,
                  padx=5, pady=3)
         label.pack(ipadx=5, ipady=2)
 
@@ -608,7 +776,7 @@ class ContourExtractor:
             logger.error(f"An error occurred while computing the convex hull: {e}")
             raise
 
-    def concave_hull(self, length_threshold: float, c: float) -> Tuple[np.ndarray, float]:
+    def concave_hull(self, length_threshold: float, c: float) -> Tuple[np.ndarray, np.ndarray, float]:
         """
         Compute the concave hull for a set of 2D points using a K-Nearest Neighbors (KNN) approach. 
         (See https://github.com/cubao/concave_hull) 
@@ -641,21 +809,24 @@ class ContourExtractor:
 
         import time
         start_time = time.perf_counter()
-        hull = concave_hull(self.projected_points, concavity=c, length_threshold=length_threshold)
+        indexes = concave_hull_indexes(self.projected_points, concavity=c, length_threshold=length_threshold)
+        hull = self.projected_points[indexes]
         hull = np.array(hull)
 
         if not np.allclose(hull[0], hull[-1]):  # Ensure the hull is closed
             hull = np.vstack((hull, hull[0]))
+            indexes = np.append(indexes, indexes[0])
 
         end_time = time.perf_counter()
         self.durations = end_time - start_time
         self.contour = hull
+        self.contour_indexes = indexes
         logger.info("")
         logger.info("===== Computing concave hull... =====")
 
-        return self.contour, self.durations
+        return self.contour, self.contour_indexes, self.durations
 
-    def compute_area(self):
+    def compute_area(self) -> float:
         """
         Compute the area enclosed by the contour using the Shoelace formula.
         The Shoelace formula is a mathematical algorithm used to determine the area of a simple polygon
@@ -682,7 +853,9 @@ class ContourExtractor:
             logger.error(f"An error occurred while computing the area: {e}")
             raise
 
-    def compute_perimeter(self):
+        return self.area
+
+    def compute_perimeter(self) -> float:
         """
         Compute the perimeter of the contour by summing the Euclidean distances between consecutive points.
         """
@@ -703,6 +876,8 @@ class ContourExtractor:
         except Exception as e:
             logger.error(f"An error occurred while computing the area: {e}")
             raise
+
+        return self.perimeter
 
     def compute_roughness(self) -> float:
         """
@@ -777,7 +952,9 @@ class ContourExtractor:
         Display the contour along with the point cloud and the computed area and perimeter.
         """
 
-        fig = plt.figure(figsize=(8, 8) if self.points_3d is None else (16, 8))
+        # Determine figure size based on the presence of 3D points
+        figure_size = (8, 8) if self.points_3d is None else (16, 8)
+        fig = plt.figure(figsize=figure_size)
 
         # Adding a 3D plot if asked
         if self.points_3d is not None:
@@ -817,7 +994,7 @@ class ContourExtractor:
         polygon = plt.Polygon(coords, closed=True, facecolor='red', alpha=0.2, edgecolor='r', linewidth=2.0)
         ax2d.add_patch(polygon)
         ax2d.plot(coords[:, 0], coords[:, 1], 'r--', linewidth=2.0, label="Contour")
-        ax2d.scatter(self.projected_points[:, 0], self.projected_points[:, 1], c='black', s=1, label="Projected points")
+        ax2d.scatter(self.projected_points[:, 0], self.projected_points[:, 1], c='black', s=2, label="Projected points")
 
         # Add area and perimeter to the legend
         area_label = f"Area = {self.area:.4f} m²"
@@ -969,47 +1146,88 @@ class ContourExtractor:
         self.reduced_cloud = sampled_pcd
         self.points_3d = np.asarray(sampled_pcd.points)
         
-    def densify_contour(self, contour: np.ndarray, densification_method, max_segment_length: float = 0.01, max_allowed_gap: float = 1.0, window: int = 2) -> np.ndarray:
+    def densify_contour(
+            self, 
+            contour: np.ndarray,
+            indexes: np.ndarray,
+            densification_method: Literal['linear', 'cubicspline'],
+            nb_points: Optional[int] = None,
+            min_segment_length: float = 0.01,
+            max_allowed_gap: float = 1.0,
+            window: int = 2,
+        ) -> Tuple[np.ndarray, np.ndarray]:
+        
         """
-        Interpolates points strictly between each pair of consecutive points in a 2D open contour.
-        Only densifies segments longer than `max_segment_length` and shorter than `max_allowed_gap`.
+            Densify a 2D open contour by interpolating extra points on segments within specified length bounds..
 
         Parameters:
-            contour (np.ndarray): (N, 2) array of ordered 2D contour points (no wrap-around).
-            max_segment_length (float): Segment length above which points will be interpolated.
-            max_allowed_gap (float): Max distance to allow interpolation; beyond this, segment is skipped.
+        -----------
+            - contour (np.ndarray): Array of shape (N, 2) containing the ordered contour vertices.
+            - indexes (np.ndarray): Array of shape (N,) containing the original indexes of the contour points.
+            - densification_method (str): Interpolation method to use ('linear' or 'cubicspline').
+            - nb_points (int): If provided, exact number of points to interpolate within each segment [Optional].
+            - min_segment_length (float): Minimum length of segments to trigger interpolation. 
+            - max_allowed_gap (float): Maximum length for which densification is allowed; beyond this, segment is skipped.
+            - window: number of points to consider beyond each side of the segment for spline construction (only for 'cubicspline').
+            
 
         Returns:
-            np.ndarray: Densified contour.
+        --------
+            - Tuple[np.ndarray, np.ndarray]: (densified_contour, new_indexes)
         """
-        densified = [contour[0]]
 
-        for i in range(1, len(contour)):
-            p1 = contour[i - 1]
-            p2 = contour[i]
-            segment_length = np.linalg.norm(p2 - p1)
+        densified_pts: list[np.ndarray] = []
+        densified_idx: list[int] = []
+        N = len(contour)
 
-            # On ne densifie que si c'est assez long mais pas trop (trou)
-            if max_segment_length < segment_length < max_allowed_gap:
-                n_interp = int(np.ceil(segment_length / max_segment_length)) - 1
-                t_values = np.linspace(0, 1, n_interp + 2)[1:-1]
+        for i in range(N-1):
+            p1, p2 = contour[i], contour[i+1]
+            l = np.linalg.norm(p2 - p1)
+
+            densified_pts.append(p1)
+            densified_idx.append(int(indexes[i]))
+
+            # Densifying only is the segment is long enough and not too long (hole)
+            if min_segment_length < l < max_allowed_gap:
+
+                if nb_points:
+                    count = nb_points
+                else:
+                    count = int(np.ceil(l/min_segment_length)) + 1
+                
+                t = np.linspace(0, 1, count)[1:-1]
+                
                 if densification_method == 'cubicspline':
-                    interp_pts = spline_interpolate_segment(contour, i-1, i, n_points=n_interp + 2, window=window)
+                    interp = spline_interpolate_segment(contour, i-1, i, n_points=count, window=window)
+                    interp = interp[1:-1]
                 elif densification_method == 'linear':
-                    interp_pts = (1 - t_values)[:, None] * p1 + t_values[:, None] * p2
-                densified.extend(interp_pts)
+                    interp = (1 - t)[:, None] * p1 + t[:, None] * p2
+                else:
+                    raise ValueError(f"Unknown method '{densification_method}', choose 'linear' or 'cubicspline'.")
 
-            densified.append(p2)
+                for point in interp:
+                    densified_pts.append(point)
+                    densified_idx.append(-1)
 
-        self.projected_points = np.array(densified)
-        return self.projected_points
+        densified_pts.append(contour[-1])
+        densified_idx.append(indexes[-1])
+
+        new_contour = np.vstack(densified_pts)
+        new_indexes = np.array(densified_idx, dtype=int)
+
+        return new_contour, new_indexes
+
 
 def spline_interpolate_segment(contour: np.ndarray, i1: int, i2: int, n_points: int = 10, window: int = 3) -> np.ndarray:
     """
-    Interpolation entre deux points d’un contour à l’aide d’une spline construite localement.
-
-    i1, i2 : indices dans le contour
-    window : nombre de points avant et après à prendre pour la spline
+    Interpolation of a segment of a contour using a locally constructed spline.
+    
+    Parameters:
+    -----------
+        - contour: np.ndarray (N, 2): points of the contour.
+        - i1: int: index of the first point of the segment.
+        - i2: int: index of the second point of the segment.
+        - window: number of points to consider beyond each side of the segment for spline construction.
     """
     from scipy.interpolate import CubicSpline
     i_start = max(0, i1 - window)
@@ -1017,7 +1235,7 @@ def spline_interpolate_segment(contour: np.ndarray, i1: int, i2: int, n_points: 
 
     segment = contour[i_start:i_end]
     if len(segment) < 4:
-        return np.linspace(contour[i1], contour[i2], n_points)[1:-1]  # fallback linéaire
+        return np.linspace(contour[i1], contour[i2], n_points)[1:-1]
 
     x = np.arange(len(segment))
     cs_x = CubicSpline(x, segment[:, 0])
@@ -1027,26 +1245,85 @@ def spline_interpolate_segment(contour: np.ndarray, i1: int, i2: int, n_points: 
     x_vals = cs_x(x_interp)
     y_vals = cs_y(x_interp)
 
-    return np.stack((x_vals, y_vals), axis=1)[1:-1]  # on enlève p1 et p2 pour éviter duplicata
+    return np.stack((x_vals, y_vals), axis=1)[1:-1]
 
-def sort_by_chain(contour: np.ndarray) -> np.ndarray:
-    used = np.zeros(len(contour), bool)
-    tree = KDTree(contour)
-    # point de départ : celui qui a la plus petite abscisse (par exemple)
-    idx0 = np.argmin(contour[:,0])
-    order = [idx0]
-    used[idx0] = True
+def visualize_sorted_contour(contour: np.ndarray, order: np.ndarray):
+    """
+    Displays the initial point cloud and the sorted path in 2D,
+    with a color gradient indicating the order of traversal.
+    """
+    try:
+        if contour is None or order is None:
+            raise ValueError("Contour or order is None. Please provide valid inputs.")
 
-    # on “marche” en choisissant à chaque fois le plus proche voisin non utilisé
-    for _ in range(len(contour)-1):
-        dist, idxs = tree.query(contour[order[-1]], k= len(contour))
-        for d, j in zip(dist, idxs):
-            if not used[j]:
-                order.append(j)
-                used[j] = True
-                break
+        if not isinstance(contour, np.ndarray) or not isinstance(order, np.ndarray):
+            raise TypeError("Both contour and order must be numpy arrays.")
 
-    return contour[order]
+        if contour.shape[1] != 2:
+            raise ValueError("Contour must be a 2D array with shape (N, 2).")
+
+        if len(order) != len(contour):
+            raise ValueError("Order array length must match the number of points in the contour.")
+
+        
+        N = len(order)
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        # Original point cloud semi-transparent
+        ax.scatter(contour[:, 0], contour[:, 1],
+                   s=10, alpha=0.3, color='gray', label='Original Point Cloud')
+
+        # Sorted points colored by order
+        xs, ys = contour.T
+        colors = np.arange(N)
+        sc = ax.scatter(xs, ys, c=colors, cmap='viridis', s=20, label='Sorted Points')
+        # Connected path
+        ax.plot(xs, ys, linewidth=1, color='orange', label='Sorted Path')
+
+        cbar = fig.colorbar(sc, ax=ax, pad=0.02)
+        cbar.set_label('Order of Traversal')
+
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_title('Nearest-Neighbor Sorted Contour (2D)')
+        ax.legend()
+        ax.axis('equal')
+        plt.tight_layout()
+        plt.show()
+
+    except Exception as e:
+        logger.error(f"An error occurred while visualizing the sorted contour: {e}")
+        raise
+
+def interpolate_contour_rbf(contour, n_points: int = 50,
+                            rbf_function: str = 'thin_plate',
+                            smooth: float = 0.0) -> np.ndarray:
+
+        from scipy.interpolate import Rbf
+        
+        hull_pts = contour[:-1]
+        
+        # 1) Paramétrisation par longueur d'arc cumulée
+        diffs = np.diff(hull_pts, axis=0, append=hull_pts[:1])
+        dists = np.hypot(diffs[:,0], diffs[:,1])
+        s = np.concatenate([[0], np.cumsum(dists[:-1])])
+        u = s / s.max()  # normalisation [0,1]
+
+        # 2) Création des deux RBF
+        rbf_x = Rbf(u, hull_pts[:,0], function=rbf_function, smooth=smooth)
+        rbf_y = Rbf(u, hull_pts[:,1], function=rbf_function, smooth=smooth)
+
+        # 3) Évaluation sur une grille dense de u
+        u_dense = np.linspace(0, 1, n_points, endpoint=False)
+        x_dense = rbf_x(u_dense)
+        y_dense = rbf_y(u_dense)
+
+        # 4) Construction du nouveau contour
+        interpolated_contour = np.vstack([x_dense, y_dense]).T
+
+        return interpolated_contour
+
 
 def extract_contour():
     root = Tk()
@@ -1057,3 +1334,8 @@ def extract_contour():
 
 if __name__ == "__main__":
     extract_contour()
+
+
+#TODO: continue to add docstring, typing, optimization
+# Add another interpolation method (RBF)
+# Add saving parameters and metrics in a config file
