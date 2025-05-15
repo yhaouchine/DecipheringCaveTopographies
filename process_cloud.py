@@ -12,6 +12,7 @@ import time
 import matplotlib.pyplot as plt
 import pyvista as pv
 import logging
+import os
 from open3d.cpu.pybind.geometry import PointCloud, Geometry
 from pathlib import Path
 from tkinter import simpledialog, messagebox, Tk, filedialog
@@ -279,7 +280,6 @@ class Section:
         
         messagebox.showinfo("Info", f"Section saved as: {self.filename}") if ply_path else print("Section not saved.")
 
-
 class PCASection(Section):
     def __init__(self, pc = None, position = None, thickness = None):
         
@@ -457,7 +457,6 @@ class PCASection(Section):
         
         return self.projected_points
 
-
 class DevelopedSection(Section):
     def __init__(self, pc: Optional[PointCloud] = None):
         super().__init__(pc=pc)
@@ -489,68 +488,36 @@ class DevelopedSection(Section):
         
         return self.developed_section
 
-
-
-
-
-
-
-def extract(self, tolerance: float) -> PointCloud:
-        """
-        Function to extract a cross-section of the point cloud located at the picked point in the visualizer.
-        If multiple points are selected in the visualizer, extract as many cross-sections.
-        
-        Parameters:
-        -----------
-        thickness: float
-            Thickness of the cross-section
-            
-        Returns:
-        --------
-        cross_section: open3d.geometry.PointCloud
-            Point cloud of the cross-section
-        """
-
-        selected_indices = self.visualizer(window_name="Select cut position", geom1=self.pc, save=False)
-        if not selected_indices:
-            sys.exit("No points selected.")
-
-        selected_points = self.pc.select_by_index(selected_indices)
-        selected_points_coordinates = np.asarray(selected_points.points)
-        cut_positions = selected_points_coordinates[0][0]
-
-        points = np.asarray(self.pc.points)
-        mask = (points[:, 0] > cut_positions - tolerance / 2) & (points[:, 0] < cut_positions + tolerance / 2)
-        cut_points = points[mask]
-        cut_point_cloud = o3d.geometry.PointCloud()
-        cut_point_cloud.points = o3d.utility.Vector3dVector(cut_points)
-        self.cross_section = cut_point_cloud
-
-        return self.cross_section
-
 def extract_cross_section(tolerance: float) -> None:
     o3d.visualization.gui.Application.instance.initialize()
 
     pcp_instance = Section()
     pcp_instance.load_cloud()
-    pcp_instance.visualizer(window_name="Point Cloud", geom1=pcp_instance.pc, save=False)
-    pcp_instance.sort_points()
-    pcp_instance.interpolate_line(auto_resolution=True, resolution=0.005)
-    pcp_instance.extract_nearby_points(tolerance=tolerance)
-    pcp_instance.display(points=pcp_instance.section)
 
-    user_input = messagebox.askyesnocancel("Save Section", "Do you want to save the section?")
-    if user_input is True:
-        pcp_instance.to_ply(points=pcp_instance.section)
-    elif user_input is False:
-        print("The section is not saved.")
-    else:
-        print("Process cancelled by the user.")
+    while True:
+        pcp_instance.visualizer(window_name="Point Cloud", geom1=pcp_instance.pc, save=False)
+        pcp_instance.sort_points()
+        pcp_instance.interpolate_line(auto_resolution=True, resolution=0.005)
+        pcp_instance.extract_nearby_points(tolerance=tolerance)
+        pcp_instance.display(points=pcp_instance.section)
+
+        user_input = messagebox.askyesnocancel("Save Section", "Do you want to save the section?")
+        if user_input is True:
+            pcp_instance.to_ply(points=pcp_instance.section)
+        elif user_input is False:
+            print("The section is not saved.")
+        else:
+            print("Process cancelled by the user.")
+
+        another_section = messagebox.askyesno("Extract Another Section", "Do you want to extract another section?")
+        if not another_section:
+            print("Exiting the process.")
+            break
 
 if __name__ == "__main__":
     root = Tk()
     root.withdraw()
-    tolerance = 0.02
+    tolerance = 0.05
     extract_cross_section(tolerance=tolerance)
 
 # TODO: 
