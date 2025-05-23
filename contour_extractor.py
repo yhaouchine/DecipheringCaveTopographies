@@ -886,7 +886,7 @@ class ContourExtractor:
         The roughness of a contour can be defined as the dispersion of the values of curvature along the contour.
         
         The curvature is computed using the formula:
-        kappa = (dx * d2x - dy * d2y) / (dx^2 + dy^2)^(3/2)
+        kappa = (dx * d2y - dy * d2x) / (dx^2 + dy^2)^(3/2)
         
         where: 
             - dx and dy are the first derivatives of the x and y coordinates of the contour.
@@ -930,7 +930,7 @@ class ContourExtractor:
         d2y = np.gradient(dy)
 
         # Compute curvature
-        numerator = (dx * d2x - dy * d2y)
+        numerator = (dx * d2y - dy * d2x)
         denominator = (dx ** 2 + dy ** 2) ** (3 / 2)
         if np.any(denominator == 0):
             logger.warning(
@@ -943,7 +943,7 @@ class ContourExtractor:
         self.curvature[np.isinf(self.curvature)] = 0.0
 
         # Compute standard deviation of the curvature
-        self.roughness = np.std(self.curvature)
+        self.roughness = np.std(np.abs(self.curvature))
 
         return self.roughness
 
@@ -959,7 +959,7 @@ class ContourExtractor:
         # Adding a 3D plot if asked
         if self.points_3d is not None:
             ax3d = fig.add_subplot(121, projection='3d')
-            ax3d.scatter(self.points_3d[:, 0], self.points_3d[:, 1], self.points_3d[:, 2], c='black', s=1, alpha=0.6,
+            ax3d.scatter(self.points_3d[:, 0], self.points_3d[:, 1], self.points_3d[:, 2], c='black', s=2, alpha=0.6,
                          label="Point cloud")
             ax3d.set_title("3D Point Cloud & Contour")
             ax3d.set_xlabel("X")
@@ -967,7 +967,7 @@ class ContourExtractor:
             ax3d.set_zlabel("Z")
             ax3d.axis("equal")
             ax3d.legend()
-            ax3d.set_box_aspect([1, 1, 1])
+            #ax3d.set_box_aspect([1, 1, 1])
             ax2d = fig.add_subplot(122)
         else:
             ax2d = fig.add_subplot(111)
@@ -991,10 +991,10 @@ class ContourExtractor:
             raise TypeError("Unsupported contour format for display.")
 
         # Fill the contour
-        polygon = plt.Polygon(coords, closed=True, facecolor='red', alpha=0.2, edgecolor='r', linewidth=2.0)
+        polygon = plt.Polygon(coords, closed=True, facecolor='red', alpha=0.2, edgecolor='r', linewidth=1.0)
         ax2d.add_patch(polygon)
         ax2d.plot(coords[:, 0], coords[:, 1], 'r--', linewidth=2.0, label="Contour")
-        ax2d.scatter(self.projected_points[:, 0], self.projected_points[:, 1], c='black', s=2, label="Projected points")
+        ax2d.scatter(self.projected_points[:, 0], self.projected_points[:, 1], c='black', s=6, label="Projected points")
 
         # Add area and perimeter to the legend
         area_label = f"Area = {self.area:.4f} m²"
@@ -1238,8 +1238,8 @@ def spline_interpolate_segment(contour: np.ndarray, i1: int, i2: int, n_points: 
         return np.linspace(contour[i1], contour[i2], n_points)[1:-1]
 
     x = np.arange(len(segment))
-    cs_x = CubicSpline(x, segment[:, 0])
-    cs_y = CubicSpline(x, segment[:, 1])
+    cs_x = CubicSpline(x, segment[:, 0], bc_type='natural')
+    cs_y = CubicSpline(x, segment[:, 1], bc_type='natural')
 
     x_interp = np.linspace(window, len(segment) - window - 1, n_points)
     x_vals = cs_x(x_interp)

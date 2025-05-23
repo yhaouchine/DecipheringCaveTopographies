@@ -57,6 +57,7 @@ class Section:
             raise ValueError("The point cloud is empty or not loaded correctly.")
         self.points_3d = np.asarray(self.pc.points)
         print(f"Point cloud {pc_path} loaded successfuly in {time.perf_counter() - start_time:.4f} seconds")
+        print(f"number of points: {len(self.points_3d)}")
         return self.pc
 
     def visualizer(self, window_name: str, geom1: Geometry = None, geom2: Geometry = None, save: Optional[bool] = None,
@@ -517,7 +518,7 @@ def extract_cross_section(tolerance: float) -> None:
 if __name__ == "__main__":
     root = Tk()
     root.withdraw()
-    tolerance = 0.05
+    tolerance = 0.02
     extract_cross_section(tolerance=tolerance)
 
 # TODO: 

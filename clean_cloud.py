@@ -4,7 +4,7 @@ import open3d as o3d
 import numpy as np
 import tkinter as tk
 from open3d.cpu.pybind.geometry import PointCloud
-from process_cloud import CrossSection
+from process_cloud import Section
 from tkinter import simpledialog, messagebox, Tk, filedialog
 from typing import Tuple, Optional, List
 
@@ -115,7 +115,7 @@ class Ellipsoid(object):
         return self.filtered_pc
 
 def clean_cloud():
-    pcp_instance = CrossSection()
+    pcp_instance = Section()
     point_cloud = pcp_instance.load_cloud()
 
     while True:
@@ -182,3 +182,7 @@ if __name__ == "__main__":
     root = Tk()
     root.withdraw()
     clean_cloud()
+
+    #TODO: 
+    # - Add ability to abort an ellipsoid without exiting the program
+    # - Decrease selected points size
