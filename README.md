@@ -22,37 +22,17 @@ pip install -r requirements.txt
 
 ## Usage
 
-1. Place your 3D point cloud data (e.g., `.ply`, `.las`, `.xyz`) in the `data/` directory.
-2. Run the main script to process the data:
-
-    ```bash
-    python reconstruct.py --input data/your_cave_file.ply --output results/
-    ```
-
-3. View the generated 2D reconstructions in the `results/` directory.
+0. (miscellaneous) polygones_test.py is used to create simple polygones (Sphere, Cuboid, Pyramid) to test the workflow.
+1. Run process_cloud.py to import the cave point cloud, define the section to extract and save the extracted section as a PLY file.
+2. Run clean_cloud.py to import the previously saved section cloud, and perform and ellispoidal cleaning of the point cloud.
+3. Run contour_extractor to import the cleaned section cloud and compute its contour.
 
 ## Dependencies
 
-- Python 3.8+
-- numpy
-- open3d
-- matplotlib
-- scipy
+- Python 3.9+
 
 Install all dependencies with:
 
 ```bash
 pip install -r requirements.txt
 ```
-
-## Example
-
-![Example 2D Reconstruction](docs/example_output.png)
-
-## Contributing
-
-Contributions are welcome! Please open issues or submit pull requests for improvements and bug fixes.
-
-## License
-
-This project is licensed under the MIT License.
