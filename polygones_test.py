@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import open3d as o3d
 from contour_extractor import ContourExtractor
-from process_cloud import PointCloudProcessor
+from process_cloud import Section
 from typing import Tuple
 
 
@@ -208,7 +208,7 @@ class Cuboid(Shape):
     def extract_section(self):
         z_level = 0
         tolerance = 0.01
-        rectangle_points = self.points[np.abs(self.points[:, 2] - z_level) < tolerance]
+        rectangle_points = self.points[np.abs(self.points[:, 1] - z_level) < tolerance]
 
         # Create a new point cloud for the section
         self.rectangle_pc = o3d.geometry.PointCloud()
@@ -388,8 +388,8 @@ if __name__ == "__main__":
             save=False, 
             save_folder=save_folder, 
             s=True, 
-            c=False, 
-            p=False
+            c=True, 
+            p=True
             )
         
         # ======= Generate disk =======
@@ -398,24 +398,14 @@ if __name__ == "__main__":
         # print(len(disk_pc.points))
         # disk_processor.visualizer(window_name="Disk", geom1=disk_pc, save=False)
 
-        # ======= Generate rectangle =======
+        #======= Generate rectangle =======
         # parallelogram_pc = cuboid_instance.extract_section()
-        # parallelogram_processor = PointCloudProcessor(cuboid_instance.pc)
+        # parallelogram_processor = Section(cuboid_instance.pc)
         # parallelogram_processor.visualizer(window_name="Parallelogram", geom1=parallelogram_pc, save=False)
 
         # ======= Generate triangle =======
         # triangle_pc = pyramid_instance.extract_section()
-        # triangle_processor = PointCloudProcessor(pyramid_instance.pc)
+        # triangle_processor = Section(pyramid_instance.pc)
         # triangle_processor.visualizer(window_name="Triangle", geom1=triangle_pc, save=False)
-
-        cloud = ContourExtractor()
-        cloud.load_cloud(pc_name="circle.ply", parent_folder=save_folder)
-        cloud.downsample(voxel_size=0.1)
-        #print(f"Number of points in the cloud after downsampling: {len(cloud.reduced_cloud.points)}")
-        #print(f"Number of points in the cloud before downsampling: {len(cloud.original_cloud.points)}")
-        cloud.pca_projection()
-        cloud.extract(method='concave', concavity=0.1, length_threshold=0.01)
-        print(f"Real area = {sphere_instance.disk_area:.4f}")
-        print(f"Real perimeter = {sphere_instance.disk_perimeter:.4f}")
 
     
