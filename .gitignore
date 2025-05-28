@@ -3,10 +3,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-results/
-point_clouds/
+images_wiki/
+original_point_clouds/
 saved_clouds/
-images/
+images_results/
 test_shapes/
 /doc/_build/
 /doc/_static/
