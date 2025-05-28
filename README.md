@@ -21,6 +21,7 @@ pip install -r requirements.txt
 ```
 
 ## Usage
+Documentation is available here: https://yhaouchine.github.io/DecipheringCaveTopographies/
 
 0. (miscellaneous) polygones_test.py is used to create simple polygones (Sphere, Cuboid, Pyramid) to test the workflow.
 1. Run process_cloud.py to import the cave point cloud, define the section to extract and save the extracted section as a PLY file.
