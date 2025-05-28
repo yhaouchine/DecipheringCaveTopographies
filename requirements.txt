@@ -1,0 +1,16 @@
+alphashape
+ast
+concave_hull
+contour_extractor
+logging
+matplotlib
+numpy
+open3d
+process_cloud
+pyvista
+scipy
+shapely
+sklearn
+tkinter
+traceback
+vtk
