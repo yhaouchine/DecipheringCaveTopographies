@@ -12,47 +12,41 @@ from process_cloud import PCASection, DevelopedSection
 from tkinter import filedialog, Tk, messagebox, ttk
 from typing import Tuple, Optional, Literal
 from open3d.cpu.pybind.geometry import PointCloud
-from concave_hull import concave_hull, concave_hull_indexes
+from concave_hull import concave_hull_indexes
 from shapely.geometry import Polygon, MultiPolygon
 
 
 logger = logging.getLogger(__name__)
 
-import json
-from tkinter import filedialog, messagebox
-
 def save_config_json(params_dict, results_dict, default_filename="config_contour.json"):
     """
-    Ouvre une boîte de dialogue pour choisir où sauvegarder,
-    puis écrit params_dict + results_dict dans un fichier JSON.
+    Function to save the parameters and results of the contour extraction process into a JSON file.
     """
     cfg = {
         "parameters": params_dict,
         "results": results_dict
     }
     filepath = filedialog.asksaveasfilename(
-        title="Enregistrer la configuration",
+        title="Save the configuration.",
         defaultextension=".json",
         filetypes=[("JSON", "*.json")],
         initialfile=default_filename
     )
     if not filepath:
-        return  # Annulé
+        return
     try:
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(cfg, f, ensure_ascii=False, indent=4)
-        messagebox.showinfo("Succès", f"Configuration sauvegardée dans :\n{filepath}")
+        messagebox.showinfo("Success", f"Configuration saved in:\n{filepath}")
     except Exception as e:
-        messagebox.showerror("Erreur sauvegarde", str(e))
-
+        messagebox.showerror("Saving attempt failed", str(e))
 
 def load_config_json(gui_instance):
     """
-    Ouvre un fichier JSON de configuration, restaure les paramètres et résultats dans la GUI,
-    à l'exception du nom de fichier (file_name), qui est seulement conservé pour la traçabilité.
+    Function to load a configuration from a JSON file and inject the parameters into the GUI fields.
     """
     filepath = filedialog.askopenfilename(
-        title="Charger une configuration",
+        title="Load a configuration file.",
         filetypes=[("JSON", "*.json")]
     )
     if not filepath:
@@ -64,10 +58,10 @@ def load_config_json(gui_instance):
 
         params = cfg.get("parameters", {})
 
-        # Boucle sur les paramètres pour les injecter dans les champs, sauf file_name
+        # loop through the parameters and set the corresponding GUI variables	
         for key, value in params.items():
             if key == "file_name":
-                continue  # On ne recharge pas le nom de fichier dans l'interface
+                continue  # Skip the file_name key, as it is not a variable in the GUI
 
             var_attr = f"{key}_var"
             entry_attr = f"{key}_entry"
@@ -75,11 +69,11 @@ def load_config_json(gui_instance):
             var = getattr(gui_instance, var_attr, None)
             entry = getattr(gui_instance, entry_attr, None)
 
-            # Variables à cocher (BooleanVar)
+            # boolean variables (BooleanVar)
             if isinstance(var, tk.BooleanVar):
                 var.set(bool(value))
 
-            # Variables à choix (StringVar ou Entry)
+            # string variables (StringVar)
             elif isinstance(var, tk.StringVar):
                 var.set(str(value))
 
@@ -97,12 +91,89 @@ def load_config_json(gui_instance):
             if hasattr(gui_instance, '_toggle_section_type_fields'):
                 gui_instance._toggle_section_type_fields()
 
-        messagebox.showinfo("Succès", f"Configuration chargée depuis :\n{filepath}")
+        messagebox.showinfo("Success", f"Configuration loaded from:\n{filepath}")
 
     except Exception as e:
-        messagebox.showerror("Erreur chargement", str(e))
+        messagebox.showerror("Loading attempt failed", str(e))
 
+def interpolate_cubic_spline(contour: np.ndarray, i1: int, i2: int, n_points: int = 10, window: int = 3) -> np.ndarray:
+    """
+    Interpolation of a segment of a contour using a locally constructed spline.
+    
+    Parameters:
+    -----------
+        - contour: np.ndarray (N, 2): points of the contour.
+        - i1: int: index of the first point of the segment.
+        - i2: int: index of the second point of the segment.
+        - n_points: int: number of points to interpolate between i1 and i2.
+        - window: number of points to consider beyond each side of the segment for spline construction.
+    """
+    from scipy.interpolate import CubicSpline
+    i_start = max(0, i1 - window)
+    i_end = min(len(contour), i2 + window + 1)
 
+    segment = contour[i_start:i_end]
+    if len(segment) < 4:
+        return np.linspace(contour[i1], contour[i2], n_points)[1:-1]
+
+    x = np.arange(len(segment))
+    cs_x = CubicSpline(x, segment[:, 0], bc_type='natural')
+    cs_y = CubicSpline(x, segment[:, 1], bc_type='natural')
+
+    x_interp = np.linspace(window, len(segment) - window - 1, n_points)
+    x_vals = cs_x(x_interp)
+    y_vals = cs_y(x_interp)
+
+    return np.stack((x_vals, y_vals), axis=1)[1:-1]
+
+def visualize_sorted_contour(contour: np.ndarray, order: np.ndarray):
+    """
+    Displays the initial point cloud and the sorted path in 2D,
+    with a color gradient indicating the order of traversal.
+    """
+    try:
+        if contour is None or order is None:
+            raise ValueError("Contour or order is None. Please provide valid inputs.")
+
+        if not isinstance(contour, np.ndarray) or not isinstance(order, np.ndarray):
+            raise TypeError("Both contour and order must be numpy arrays.")
+
+        if contour.shape[1] != 2:
+            raise ValueError("Contour must be a 2D array with shape (N, 2).")
+
+        if len(order) != len(contour):
+            raise ValueError("Order array length must match the number of points in the contour.")
+
+        
+        N = len(order)
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        # Original point cloud semi-transparent
+        ax.scatter(contour[:, 0], contour[:, 1],
+                   s=10, alpha=0.3, color='gray', label='Original Point Cloud')
+
+        # Sorted points colored by order
+        xs, ys = contour.T
+        colors = np.arange(N)
+        sc = ax.scatter(xs, ys, c=colors, cmap='viridis', s=20, label='Sorted Points')
+        # Connected path
+        ax.plot(xs, ys, linewidth=1, color='orange', label='Sorted Path')
+
+        cbar = fig.colorbar(sc, ax=ax, pad=0.02)
+        cbar.set_label('Order of Traversal')
+
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_title('Nearest-Neighbor Sorted Contour (2D)')
+        ax.legend()
+        ax.axis('equal')
+        plt.tight_layout()
+        plt.show()
+
+    except Exception as e:
+        logger.error(f"An error occurred while visualizing the sorted contour: {e}")
+        raise
 
 class UserInterface:
     """
@@ -314,15 +385,15 @@ class UserInterface:
             self.densification_method_combo,
             "Select the method to densify the contour. \n" \
             "- Linear: Interpolate points using a linear method. \n" \
-            "- Cubic Spline: Interpolate points using a cubic spline method."
+            "- Cubic Spline: Interpolate points using a cubic spline method [EXPERIMENTAL]."
         )
 
-        ttk.Label(frame, text="Max segment length:").grid(row=2, column=0, sticky="w", pady=5)
+        ttk.Label(frame, text="Min segment length:").grid(row=2, column=0, sticky="w", pady=5)
         self.segment_length_entry = ttk.Entry(frame); self.segment_length_entry.insert(0, "0.01")
         self.segment_length_entry.grid(row=2, column=1, sticky="ew", pady=5)
         Tooltip(
             self.segment_length_entry,
-            "The maximum length of the segments constructed by the densification process. " \
+            "The Minimum length of the segments constructed by the densification process. " \
             " The unit correspond to the unit of the point cloud coordinates (usually meters)."
         )
 
@@ -340,17 +411,16 @@ class UserInterface:
         Tooltip(
             self.window_entry,
             "The size of the window within which the points will be taken into account for the densification process. " \
-            "TO BE USED WITH CUBIC SPLINE METHOD ONLY."
+            "TO BE USED WITH CUBIC SPLINE METHOD ONLY [EXPERIMENTAL]."
         )
 
-        ttk.Label(frame, text="Number of Points:").grid(row=5, column=0, sticky="w", pady=5)
+        ttk.Label(frame, text="Spline number of Points [EXPERIMENTAL]:").grid(row=5, column=0, sticky="w", pady=5)
         self.nbpoints_entry = ttk.Entry(frame); self.nbpoints_entry.insert(0, "3")
         self.nbpoints_entry.grid(row=5, column=1, sticky="ew", pady=5)
         Tooltip(
             self.nbpoints_entry,
-            "The size of the window within which the points will be taken into account for the densification process. " \
-            "TO BE USED WITH CUBIC SPLINE METHOD ONLY."
-            #TODO: change the tooltip text.
+            "Number of points to be used for the cubic spline densification method. If the number of points is 0 or None, it is automatically" \
+            "calculated based on the segment length and the minimum segment length [EXPERIMENTAL]."
         )
 
     def _create_button_frame(self):
@@ -600,7 +670,6 @@ class UserInterface:
 
         except Exception as e:
             messagebox.showerror("Erreur sauvegarde configuration", str(e))
-
 
 class Tooltip:
     def __init__(self, widget, text, delay=500):
@@ -999,7 +1068,7 @@ class ContourExtractor:
         # Add area and perimeter to the legend
         area_label = f"Area = {self.area:.4f} m²"
         perimeter_label = f"Perimeter = {self.perimeter:.4f} m"
-        roughness_label = f"Roughness = {self.roughness:.2f}"
+        roughness_label = f"Roughness = {self.roughness:.4f}"
         ax2d.plot([], [], ' ', label=area_label)
         ax2d.plot([], [], ' ', label=perimeter_label)
         ax2d.plot([], [], ' ', label=roughness_label)
@@ -1190,7 +1259,7 @@ class ContourExtractor:
             # Densifying only is the segment is long enough and not too long (hole)
             if min_segment_length < l < max_allowed_gap:
 
-                if nb_points:
+                if nb_points is not None and nb_points > 0:
                     count = nb_points
                 else:
                     count = int(np.ceil(l/min_segment_length)) + 1
@@ -1198,7 +1267,7 @@ class ContourExtractor:
                 t = np.linspace(0, 1, count)[1:-1]
                 
                 if densification_method == 'cubicspline':
-                    interp = spline_interpolate_segment(contour, i-1, i, n_points=count, window=window)
+                    interp = interpolate_cubic_spline(contour, i-1, i, n_points=count, window=window)
                     interp = interp[1:-1]
                 elif densification_method == 'linear':
                     interp = (1 - t)[:, None] * p1 + t[:, None] * p2
@@ -1218,113 +1287,6 @@ class ContourExtractor:
         return new_contour, new_indexes
 
 
-def spline_interpolate_segment(contour: np.ndarray, i1: int, i2: int, n_points: int = 10, window: int = 3) -> np.ndarray:
-    """
-    Interpolation of a segment of a contour using a locally constructed spline.
-    
-    Parameters:
-    -----------
-        - contour: np.ndarray (N, 2): points of the contour.
-        - i1: int: index of the first point of the segment.
-        - i2: int: index of the second point of the segment.
-        - window: number of points to consider beyond each side of the segment for spline construction.
-    """
-    from scipy.interpolate import CubicSpline
-    i_start = max(0, i1 - window)
-    i_end = min(len(contour), i2 + window + 1)
-
-    segment = contour[i_start:i_end]
-    if len(segment) < 4:
-        return np.linspace(contour[i1], contour[i2], n_points)[1:-1]
-
-    x = np.arange(len(segment))
-    cs_x = CubicSpline(x, segment[:, 0], bc_type='natural')
-    cs_y = CubicSpline(x, segment[:, 1], bc_type='natural')
-
-    x_interp = np.linspace(window, len(segment) - window - 1, n_points)
-    x_vals = cs_x(x_interp)
-    y_vals = cs_y(x_interp)
-
-    return np.stack((x_vals, y_vals), axis=1)[1:-1]
-
-def visualize_sorted_contour(contour: np.ndarray, order: np.ndarray):
-    """
-    Displays the initial point cloud and the sorted path in 2D,
-    with a color gradient indicating the order of traversal.
-    """
-    try:
-        if contour is None or order is None:
-            raise ValueError("Contour or order is None. Please provide valid inputs.")
-
-        if not isinstance(contour, np.ndarray) or not isinstance(order, np.ndarray):
-            raise TypeError("Both contour and order must be numpy arrays.")
-
-        if contour.shape[1] != 2:
-            raise ValueError("Contour must be a 2D array with shape (N, 2).")
-
-        if len(order) != len(contour):
-            raise ValueError("Order array length must match the number of points in the contour.")
-
-        
-        N = len(order)
-
-        fig, ax = plt.subplots(figsize=(8, 6))
-
-        # Original point cloud semi-transparent
-        ax.scatter(contour[:, 0], contour[:, 1],
-                   s=10, alpha=0.3, color='gray', label='Original Point Cloud')
-
-        # Sorted points colored by order
-        xs, ys = contour.T
-        colors = np.arange(N)
-        sc = ax.scatter(xs, ys, c=colors, cmap='viridis', s=20, label='Sorted Points')
-        # Connected path
-        ax.plot(xs, ys, linewidth=1, color='orange', label='Sorted Path')
-
-        cbar = fig.colorbar(sc, ax=ax, pad=0.02)
-        cbar.set_label('Order of Traversal')
-
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_title('Nearest-Neighbor Sorted Contour (2D)')
-        ax.legend()
-        ax.axis('equal')
-        plt.tight_layout()
-        plt.show()
-
-    except Exception as e:
-        logger.error(f"An error occurred while visualizing the sorted contour: {e}")
-        raise
-
-def interpolate_contour_rbf(contour, n_points: int = 50,
-                            rbf_function: str = 'thin_plate',
-                            smooth: float = 0.0) -> np.ndarray:
-
-        from scipy.interpolate import Rbf
-        
-        hull_pts = contour[:-1]
-        
-        # 1) Paramétrisation par longueur d'arc cumulée
-        diffs = np.diff(hull_pts, axis=0, append=hull_pts[:1])
-        dists = np.hypot(diffs[:,0], diffs[:,1])
-        s = np.concatenate([[0], np.cumsum(dists[:-1])])
-        u = s / s.max()  # normalisation [0,1]
-
-        # 2) Création des deux RBF
-        rbf_x = Rbf(u, hull_pts[:,0], function=rbf_function, smooth=smooth)
-        rbf_y = Rbf(u, hull_pts[:,1], function=rbf_function, smooth=smooth)
-
-        # 3) Évaluation sur une grille dense de u
-        u_dense = np.linspace(0, 1, n_points, endpoint=False)
-        x_dense = rbf_x(u_dense)
-        y_dense = rbf_y(u_dense)
-
-        # 4) Construction du nouveau contour
-        interpolated_contour = np.vstack([x_dense, y_dense]).T
-
-        return interpolated_contour
-
-
 def extract_contour():
     root = Tk()
     root.withdraw()
@@ -1334,8 +1296,3 @@ def extract_contour():
 
 if __name__ == "__main__":
     extract_contour()
-
-
-#TODO: continue to add docstring, typing, optimization
-# Add another interpolation method (RBF)
-# Add saving parameters and metrics in a config file
